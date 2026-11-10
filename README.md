@@ -59,6 +59,10 @@ the pane asks the agent in chat to play that move through
 and the pane can never diverge from the real board. (Promotions are
 played as queens; ask in chat for an underpromotion.)
 
+Piece artwork in the board pane: the Cburnett chess pieces (by Colin
+M. L. Burnett, via the lichess project), licensed under CC BY-SA 3.0 /
+GFDL / BSD.
+
 ## Tools
 
 | Tool | What it does |
