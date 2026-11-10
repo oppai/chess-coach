@@ -16,3 +16,16 @@ tags: [chess, games, coaching, education]
 requires_hermes: ">=0.23.0"
 python_dependencies:
   - "chess>=1.10,<2"
+provides_tools:
+  - chess_new_game
+  - chess_set_position
+  - chess_board
+  - chess_list_games
+  - chess_legal_moves
+  - chess_make_move
+  - chess_undo
+  - chess_review_position
+  - chess_solve_mate
+  - chess_material
+  - chess_pgn
+provides_hooks: []
