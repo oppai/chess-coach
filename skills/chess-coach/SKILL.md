@@ -13,8 +13,10 @@ board from the tools, and play every move (yours and the user's) through
 
 ## Ground rules
 
-- Show the ASCII board from `chess_board` after every move, with the
-  last move and the status (check / mate / draw) the tool reported.
+- Show the board from `chess_board` after every move: use the
+  `board_unicode` field (real piece glyphs) inside a code block so it
+  renders as a proper board, with the last move and the status
+  (check / mate / draw) the tool reported.
 - Accept the user's moves in SAN or UCI, conversationally ("knight to
   f3" is fine — translate to `Nf3` and play it). If `chess_make_move`
   rejects a move, explain briefly and ask again; do not silently pick a

@@ -100,6 +100,7 @@ def _view(rec):
         "name": rec.get("name", ""),
         "fen": board.fen(),
         "board_ascii": str(board),
+        "board_unicode": board.unicode(borders=True),
         "moves_san": list(rec["moves"]),
         "status": _status(board),
     }
@@ -276,6 +277,7 @@ def chess_review_position(args, **kwargs):
         "total_plies": total,
         "fen": board.fen(),
         "board_ascii": str(board),
+        "board_unicode": board.unicode(borders=True),
         "status": _status(board),
         "move_that_led_here": rec["moves"][ply - 1] if ply > 0 else None,
         "next_move_played": rec["moves"][ply] if ply < total else None,
