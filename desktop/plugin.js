@@ -71,7 +71,8 @@ out.push(String(i / 2 + 1) + '. ' + moves[i] + (moves[i + 1]? ' ' + moves[i + 1]
 return out
 }
 
-function Board({ game, sel, targets, onSquare}) {
+function Board({ game, sel, targets, onSquare, pending}) {
+const [hoverSq, setHoverSq] = useState(null)
 const board = parseFen(game.fen)
 if (!board) {
 return jsx('div', { className: 'text-sm', children: 'No position yet.'})
@@ -89,22 +90,30 @@ const ownPiece =
 piece &&!over && (turn === 'white') === isWhitePiece
 const isSel = sel === name
 const target = targets.find((t) => t.to === name)
+const isPending = !!pending && (pending.from === name || pending.to === name)
+const hot = hoverSq === name && (ownPiece || !!target)
 squares.push(
 jsx(
 'div',
 {
 onClick: () => onSquare(name, piece),
+onMouseEnter: () => setHoverSq(name),
+onMouseLeave: () => setHoverSq(null),
 style: {
 position: 'relative',
 display: 'flex',
 alignItems: 'center',
 justifyContent: 'center',
 aspectRatio: '1',
-backgroundColor: dark
+backgroundColor: hot
+? 'color-mix(in srgb, var(--ui-accent) 62%, transparent)'
+: dark
 ? 'color-mix(in srgb, var(--ui-accent) 42%, transparent)'
 : 'color-mix(in srgb, var(--ui-accent) 10%, transparent)',
 boxShadow: isSel
 ? 'inset 0 0 0 3px var(--ui-accent)'
+: isPending
+? 'inset 0 0 0 3px #e8b93e'
 : target
 ? 'inset 0 0 0 2px color-mix(in srgb, var(--ui-accent) 65%, transparent)'
 : 'none',
@@ -134,26 +143,25 @@ pointerEvents: 'none'
 children: FILES[f]
 })
 : null,
-target &&!piece && PIECE_ART[piece]
-? jsx('img', {
-src: PIECE_ART[piece],
-alt: piece,
-draggable: false,
-style: { width: '88%', height: '88%', pointerEvents: 'none' }
-})
-: piece
+target && !piece
 ? jsx('span', {
 style: {
 position: 'absolute',
 width: '26%', height: '26%', borderRadius: '50%',
-backgroundColor:
-'color-mix(in srgb, var(--ui-accent) 55%, transparent)',
+backgroundColor: 'color-mix(in srgb, var(--ui-accent) 55%, transparent)',
 pointerEvents: 'none'
 },
 children: ''
 })
 : null,
-piece
+piece && PIECE_ART[piece]
+? jsx('img', {
+src: PIECE_ART[piece],
+alt: piece,
+draggable: false,
+style: { width: '100%', height: '100%', transform: 'scale(1.14)', filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.45))', pointerEvents: 'none' }
+})
+: piece
 ? jsx('span', {
 style: {
 fontSize: '9.6cqw',
@@ -194,6 +202,7 @@ const [selGame, setSelGame] = useState(null)
 const [selSq, setSelSq] = useState(null)
 const [note, setNote] = useState(null)
 const [err, setErr] = useState(null)
+const [thinking, setThinking] = useState(null)
 
 useEffect(() => {
 let alive = true
@@ -222,6 +231,16 @@ clearInterval(timer)
 if (off) off()
 }
 }, [])
+useEffect(() => {
+if (!thinking || !data) return
+const g = (data.games || []).find((x) => x.game_id === thinking.gameId)
+if (!g || g.fen !== thinking.fen) setThinking(null)
+}, [data, thinking])
+useEffect(() => {
+if (!thinking) return
+const t = setTimeout(() => setThinking(null), 90000)
+return () => clearTimeout(t)
+}, [thinking])
 
 const games = (data && data.games) || []
 const game =
@@ -247,6 +266,7 @@ const hasLegal = !!(game && Array.isArray(game.legal_moves))
 
 const onSquare = (name, piece) => {
 if (!game || (game.status && game.status.is_game_over)) return
+if (thinking) return
 const turn = (game.status && game.status.turn) || 'white'
 const isOwn = (pc) => !!pc && ((turn === 'white') === (pc === pc.toUpperCase()))
 // Completing a move: a second, non-own square was clicked.
@@ -272,6 +292,7 @@ const text = '盤面パネルから送信: game_id = ' + game.game_id + ' / UCI 
 try {
 host.composer.submit(null, text)
 setNote('送信しました: ' + san + '（エージェントが指します）')
+setThinking({ gameId: game.game_id, fen: game.fen, san, from: selSq, to: name })
 } catch (e) {
 setNote('送信できませんでした。チャットで直接指してください。')
 }
@@ -301,6 +322,16 @@ children: game? statusText(game): ''
 })
 ]
 }),
+thinking
+? jsxs('div', {
+className: 'flex items-center gap-2 text-[0.8125rem]',
+style: { color: 'var(--ui-text-secondary)'},
+children: [
+jsx('span', { className: 'animate-pulse', style: { width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#e8b93e', display: 'inline-block' }, children: ''}),
+'AIが考え中…（' + thinking.san + ' を送信済み）'
+]
+})
+: null,
 games.length > 1
 ? jsx('div', {
 className: 'flex flex-wrap gap-1',
@@ -331,7 +362,7 @@ children:
 })
 : null,
 game
-? jsx(Board, { game, sel: selSq, targets, onSquare})
+? jsx(Board, { game, sel: selSq, targets, onSquare, pending: thinking && game && thinking.gameId === game.game_id? thinking: null})
 : jsx('div', {
 className: 'text-sm',
 style: { color: 'var(--ui-text-secondary)'},
