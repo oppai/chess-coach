@@ -101,7 +101,7 @@ f === 0
 ? jsx('span', {
 style: {
 position: 'absolute', top: '2px', left: '4px',
-fontSize: 'max(11px, 1.9cqw)', lineHeight: '1',
+fontSize: 'max(22px, 3.8cqw)', lineHeight: '1', fontWeight: '700',
 color: 'var(--ui-text-secondary)',
 pointerEvents: 'none'
 },
@@ -112,7 +112,7 @@ r === 7
 ? jsx('span', {
 style: {
 position: 'absolute', bottom: '2px', right: '4px',
-fontSize: 'max(11px, 1.9cqw)', lineHeight: '1',
+fontSize: 'max(22px, 3.8cqw)', lineHeight: '1', fontWeight: '700',
 color: 'var(--ui-text-secondary)',
 pointerEvents: 'none'
 },
