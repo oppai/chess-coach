@@ -163,6 +163,17 @@ def _mirror_and_notify(rec=None):
             v = _view(g)
             v["last_move"] = g["moves"][-1] if g["moves"] else None
             v["created"] = g.get("created")
+            board = _board_of(g)
+            v["legal_moves"] = [
+                {
+                    "uci": m.uci(),
+                    "san": board.san(m),
+                    "from": chess.square_name(m.from_square),
+                    "to": chess.square_name(m.to_square),
+                    "promotion": m.promotion is not None,
+                }
+                for m in board.legal_moves
+            ]
             views.append(v)
         views.sort(key=lambda v: v.get("created") or 0)
         text = json.dumps({"updated": int(time.time()), "games": views},

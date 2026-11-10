@@ -46,15 +46,18 @@ Try it:
 
 ## Desktop board pane
 
-The package also ships a Desktop half: a read-only board pane
+The package also ships a Desktop half: a live board pane
 (`desktop/plugin.js`) backed by the plugin's own Python API
 (`dashboard/plugin_api.py`). After installing the package, enable the
 **Chess Coach** desktop plugin in **Capabilities → Plugins** (use
 **Rescan** if it does not appear). The pane shows the live position,
 status, last move and move list for the current game, updating as
-moves are played in chat. It is display-only by design: every move
-goes through the `chess_*` tools, so the pane can never diverge from
-the referee's board.
+moves are played in chat. You can also play by clicking: select one
+of your pieces (legal targets light up), then click a destination —
+the pane asks the agent in chat to play that move through
+`chess_make_move`, so every move is still validated by the referee
+and the pane can never diverge from the real board. (Promotions are
+played as queens; ask in chat for an underpromotion.)
 
 ## Tools
 
