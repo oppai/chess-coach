@@ -121,16 +121,42 @@ def _new_record(start_fen, name):
     return rec
 
 
+_LAST_MIRROR_ERROR = None
+
+
+def _mirror_targets():
+    """Candidate locations for games.json, most-preferred first."""
+    import os
+    from pathlib import Path
+
+    targets = []
+    try:
+        from plugins.plugin_storage import plugin_data_dir
+
+        targets.append(plugin_data_dir("chess-coach") / "games.json")
+    except Exception:
+        pass
+    home = os.environ.get("HERMES_HOME")
+    if home:
+        targets.append(Path(home) / "plugin-data" / "chess-coach" / "games.json")
+    targets.append(Path.home() / ".hermes" / "plugin-data" / "chess-coach" / "games.json")
+    return targets
+
+
 def _mirror_and_notify(rec=None):
     """Best-effort desktop support; never allowed to break a tool call.
 
-    1. Mirror the full game list to games.json in the plugin data dir,
-       where dashboard/plugin_api.py serves it to the desktop board pane.
+    1. Mirror the full game list to games.json, where
+       dashboard/plugin_api.py serves it to the desktop board pane.
+       Several target locations are tried; the first success wins.
     2. Broadcast a game.updated event so an open pane refreshes at once
        (the pane also polls as a fallback).
+
+    Failures are remembered in _LAST_MIRROR_ERROR and surfaced through
+    chess_list_games, instead of vanishing silently.
     """
+    global _LAST_MIRROR_ERROR
     try:
-        from plugins.plugin_storage import plugin_data_dir
         games = _load_games()
         views = []
         for g in games.values():
@@ -139,12 +165,21 @@ def _mirror_and_notify(rec=None):
             v["created"] = g.get("created")
             views.append(v)
         views.sort(key=lambda v: v.get("created") or 0)
-        payload = {"updated": int(time.time()), "games": views}
-        data_dir = plugin_data_dir("chess-coach")
-        (data_dir / "games.json").write_text(
-            json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        pass
+        text = json.dumps({"updated": int(time.time()), "games": views},
+                          ensure_ascii=False)
+        errors = []
+        written = False
+        for target in _mirror_targets():
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(text, encoding="utf-8")
+                written = True
+                break
+            except Exception as exc:  # try the next location
+                errors.append(f"{target}: {exc!r}")
+        _LAST_MIRROR_ERROR = None if written else "; ".join(errors) or "no targets"
+    except Exception as exc:
+        _LAST_MIRROR_ERROR = f"mirror build failed: {exc!r}"
     try:
         from hermes_cli.plugin_events import broadcast_plugin_event
         payload = {}
@@ -221,7 +256,8 @@ def chess_list_games(args, **kwargs):
             "is_game_over": board.is_game_over(),
             "created": rec.get("created"),
         })
-    return json.dumps({"games": out}, ensure_ascii=False)
+    return json.dumps({"games": out, "mirror_error": _LAST_MIRROR_ERROR},
+                      ensure_ascii=False)
 
 
 def chess_legal_moves(args, **kwargs):
