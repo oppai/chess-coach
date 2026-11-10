@@ -121,6 +121,40 @@ def _new_record(start_fen, name):
     return rec
 
 
+def _mirror_and_notify(rec=None):
+    """Best-effort desktop support; never allowed to break a tool call.
+
+    1. Mirror the full game list to games.json in the plugin data dir,
+       where dashboard/plugin_api.py serves it to the desktop board pane.
+    2. Broadcast a game.updated event so an open pane refreshes at once
+       (the pane also polls as a fallback).
+    """
+    try:
+        from plugins.plugin_storage import plugin_data_dir
+        games = _load_games()
+        views = []
+        for g in games.values():
+            v = _view(g)
+            v["last_move"] = g["moves"][-1] if g["moves"] else None
+            v["created"] = g.get("created")
+            views.append(v)
+        views.sort(key=lambda v: v.get("created") or 0)
+        payload = {"updated": int(time.time()), "games": views}
+        data_dir = plugin_data_dir("chess-coach")
+        (data_dir / "games.json").write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    try:
+        from hermes_cli.plugin_events import broadcast_plugin_event
+        payload = {}
+        if rec is not None:
+            payload = {"game_id": rec["id"], "fen": _board_of(rec).fen()}
+        broadcast_plugin_event("chess-coach", "game.updated", payload)
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------- tools
 
 _ODDS_SQUARES = {
@@ -150,6 +184,7 @@ def chess_new_game(args, **kwargs):
     rec = _new_record(board.fen(), args.get("name") or "")
     view = _view(rec)
     view["odds"] = {"piece": odds, "giver": giver} if odds != "none" else None
+    _mirror_and_notify(rec)
     return json.dumps(view, ensure_ascii=False)
 
 
@@ -162,6 +197,7 @@ def chess_set_position(args, **kwargs):
     except ValueError as exc:
         return _err(f"Invalid FEN: {exc}")
     rec = _new_record(board.fen(), args.get("name") or "")
+    _mirror_and_notify(rec)
     return json.dumps(_view(rec), ensure_ascii=False)
 
 
@@ -248,6 +284,7 @@ def chess_make_move(args, **kwargs):
         "gave_check": board.is_check(),
         "is_checkmate": board.is_checkmate(),
     }
+    _mirror_and_notify(rec)
     return json.dumps(view, ensure_ascii=False)
 
 
@@ -301,6 +338,7 @@ def chess_undo(args, **kwargs):
     games = _load_games()
     games[rec["id"]] = rec
     _save_games(games)
+    _mirror_and_notify(rec)
     return json.dumps(_view(rec), ensure_ascii=False)
 
 

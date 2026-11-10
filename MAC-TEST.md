@@ -28,3 +28,13 @@ hermes plugins validate ~/.hermes/plugins/chess-coach --install-deps
 ## 4. 合格条件
 - 2のループが一通り動く＋3で dangerous なし → 凍結へ（コミット＋SHA固定）
 - 詰まったら、止まったステップ番号と画面の文言をそのまま教えてください
+
+## 5. 盤面パネル（Desktop半分）の確認 — 追加分
+前提：最新版を pull してフォルダを再コピー済み（dashboard/ と desktop/ が入っていること）。
+
+1. Hermes Desktop を再起動（または Capabilities → Plugins で **Rescan**）
+2. Capabilities → Plugins で **Chess Coach** の Desktop 側トグルを ON
+3. 右側に「Chess board」ペインが出るか（出なければ ⌘K → "Reload desktop plugins"）
+4. チャットで新しい対局か1手詰めを始める → パネルの盤面・手番表示・棋譜が追随するか（イベント通知＋2.5秒ポーリング）
+5. 手を1つ指す → パネルが新しい局面に変わるか
+- 盤面が出ない／真っ白な場合は、ペイン内の文言と、Capabilities のトグル状態を教えてください
