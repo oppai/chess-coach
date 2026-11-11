@@ -17,6 +17,9 @@ import uuid
 import chess
 import chess.pgn
 import io
+from functools import wraps
+from . import storage
+from .solver import solve, SearchLimit
 
 # ---------------------------------------------------------------- state
 
@@ -33,17 +36,11 @@ def bind_state(getter, setter):
 
 
 def _load_games():
-    if _state_get is not None:
-        games = _state_get()
-        if isinstance(games, dict):
-            return games
-    return _memory["games"]
+    return storage.load()
 
 
 def _save_games(games):
-    _memory["games"] = games
-    if _state_set is not None:
-        _state_set(games)
+    storage.save(games)
 
 
 def _get_game(game_id):
@@ -99,6 +96,12 @@ def _view(rec):
         "game_id": rec["id"],
         "name": rec.get("name", ""),
         "fen": board.fen(),
+        "start_fen": rec["start_fen"],
+        "revision": rec.get("revision", 0),
+        "mode": rec.get("mode", "analysis"),
+        "user_color": rec.get("user_color"),
+        "odds": rec.get("odds"),
+        "puzzle": rec.get("puzzle"),
         "board_ascii": str(board),
         "board_unicode": board.unicode(borders=True),
         "moves_san": list(rec["moves"]),
@@ -114,6 +117,7 @@ def _new_record(start_fen, name):
         "name": name or "",
         "start_fen": start_fen,
         "moves": [],
+        "revision": 0,
         "created": int(time.time()),
     }
     games[game_id] = rec
@@ -183,7 +187,12 @@ def _mirror_and_notify(rec=None):
         for target in _mirror_targets():
             try:
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(text, encoding="utf-8")
+                import os
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent, delete=False) as handle:
+                    handle.write(text)
+                    temporary = handle.name
+                os.replace(temporary, target)
                 written = True
                 break
             except Exception as exc:  # try the next location
@@ -219,6 +228,8 @@ _ODDS_SQUARES = {
 def chess_new_game(args, **kwargs):
     odds = (args.get("odds") or "none").lower()
     giver = (args.get("odds_giver") or "black").lower()
+    if giver not in ("white", "black"):
+        return _err("odds_giver must be white or black")
     board = chess.Board()
     if odds != "none":
         if odds not in ("pawn", "knight", "rook", "queen"):
@@ -228,8 +239,12 @@ def chess_new_game(args, **kwargs):
         board.remove_piece_at(square)
         board.turn = chess.WHITE
     rec = _new_record(board.fen(), args.get("name") or "")
+    rec["mode"] = "game"
+    rec["user_color"] = args.get("user_color") or ("white" if giver == "black" else "black")
+    if rec["user_color"] not in ("white", "black"):
+        raise ValueError("user_color must be white or black")
+    rec["odds"] = {"piece": odds, "giver": giver} if odds != "none" else None
     view = _view(rec)
-    view["odds"] = {"piece": odds, "giver": giver} if odds != "none" else None
     _mirror_and_notify(rec)
     return json.dumps(view, ensure_ascii=False)
 
@@ -320,6 +335,7 @@ def chess_make_move(args, **kwargs):
     captured = board.piece_at(move.to_square)
     board.push(move)
     rec["moves"].append(san)
+    rec["revision"] = rec.get("revision", 0) + 1
     games = _load_games()
     games[rec["id"]] = rec
     _save_games(games)
@@ -382,6 +398,7 @@ def chess_undo(args, **kwargs):
     if plies > len(rec["moves"]):
         return _err(f"Cannot undo {plies} plies; only {len(rec['moves'])} played")
     rec["moves"] = rec["moves"][:-plies]
+    rec["revision"] = rec.get("revision", 0) + 1
     games = _load_games()
     games[rec["id"]] = rec
     _save_games(games)
@@ -390,54 +407,21 @@ def chess_undo(args, **kwargs):
 
 
 def _find_mate(board, max_moves):
-    """Exhaustive mate search for the side to move. Returns SAN line or None."""
-    if max_moves < 1 or board.is_game_over():
-        return None
-    for move in board.legal_moves:
-        san = board.san(move)
-        board.push(move)
-        if board.is_checkmate():
-            board.pop()
-            return [san]
-        if max_moves >= 2:
-            # Mate in 2: every defender reply must allow a mate in 1.
-            all_replies_mated = True
-            worst_line = None
-            for reply in board.legal_moves:
-                rsan = board.san(reply)
-                board.push(reply)
-                sub = _find_mate(board, 1)
-                board.pop()
-                if sub is None:
-                    all_replies_mated = False
-                    break
-                worst_line = [rsan] + sub
-            if all_replies_mated and worst_line is not None:
-                line = [san] + worst_line
-                board.pop()
-                return line
-        board.pop()
-    return None
+    return solve(board, max_moves)["line_san"] or None
 
 
 def chess_solve_mate(args, **kwargs):
     rec, err = _get_game(args.get("game_id", ""))
     if err:
         return err
+    max_moves = args.get("max_moves", 2)
+    if type(max_moves) is not int or not 1 <= max_moves <= 4:
+        return _err("max_moves must be an integer from 1 to 4")
     try:
-        max_moves = int(args.get("max_moves") or 2)
-    except (TypeError, ValueError):
-        max_moves = 2
-    if max_moves not in (1, 2):
-        return _err("max_moves must be 1 or 2")
-    board = _board_of(rec)
-    line = _find_mate(board, max_moves)
-    if line is None:
-        return json.dumps({"game_id": rec["id"], "mate_in": None,
-                           "searched_up_to": max_moves}, ensure_ascii=False)
-    return json.dumps({"game_id": rec["id"],
-                       "mate_in": (len(line) + 1) // 2,
-                       "line_san": line}, ensure_ascii=False)
+        result = solve(_board_of(rec), max_moves)
+    except SearchLimit:
+        return json.dumps({"game_id": rec["id"], "status": "inconclusive", "error": "Search limit reached. This position has not been verified."})
+    return json.dumps({"game_id": rec["id"], "status": "verified", "searched_up_to": max_moves, **result})
 
 
 _VALUES = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3,
@@ -491,3 +475,26 @@ def chess_pgn(args, **kwargs):
     exporter = chess.pgn.StringExporter(headers=True, variations=False, comments=False)
     game.accept(exporter)
     return json.dumps({"game_id": rec["id"], "pgn": str(exporter)}, ensure_ascii=False)
+
+
+def transactional(handler):
+    @wraps(handler)
+    def run(args, **kwargs):
+        try:
+            with storage.transaction(_state_get):
+                # Optimistic concurrency protects a UI move from a stale position.
+                if "expected_revision" in args:
+                    rec, err = _get_game(args.get("game_id", ""))
+                    if err:
+                        return err
+                    if rec.get("revision", 0) != args["expected_revision"]:
+                        return json.dumps({"error": "Position changed. Refresh and try again.", "code": "stale_position"})
+                return handler(args, **kwargs)
+        except (ValueError, TypeError) as exc:
+            return _err(str(exc))
+    return run
+
+
+for _name, _handler in list(globals().items()):
+    if _name.startswith("chess_") and callable(_handler):
+        globals()[_name] = transactional(_handler)

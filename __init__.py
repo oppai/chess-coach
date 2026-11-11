@@ -17,8 +17,8 @@ _TOOLSET = "chess"
 
 
 def register(ctx):
-    # Persist games in the plugin's own state namespace (profile-scoped,
-    # survives restarts) so a lesson can continue across sessions.
+    # Supply legacy state for one-time migration. Both desktop and agent
+    # now use the profile-scoped SQLite referee store.
     tools.bind_state(
         lambda: ctx.state.get("games", default={}),
         lambda games: ctx.state.set("games", games),

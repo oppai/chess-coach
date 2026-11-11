@@ -1,107 +1,55 @@
-# Chess Coach — a Hermes Agent plugin
+# Chess Coach
 
-A chess board that your agent can actually trust, plus a coaching skill
-that turns it into lessons.
+Play on the board. Learn in chat.
 
-The plugin registers eleven `chess_*` tools that own the board — game
-state, legal moves, check / checkmate / stalemate / draw detection, an
-exhaustive mate-in-1/2 search, material counting and PGN export — all
-computed with [python-chess](https://python-chess.readthedocs.io/).
-The agent never has to guess whether a move is legal or a position is
-mate: it asks the board.
+A Hermes Agent plugin with a native Desktop board, instant local practice, and an optional conversational opponent. English is the default; switch to 日本語 in the panel. The language selection is remembered on this device.
 
-What the agent does with the board is up to the agent (guided by the
-bundled `chess-coach` skill):
+[日本語ガイド](README.ja.md)
 
-- **Checkmate practice** — set up verified mate-in-1 / mate-in-2
-  positions; the user finds the mate, the board verifies it.
-- **Handicap games** — play against the agent with pawn, knight, rook
-  or queen odds.
-- **Strategy & opening guidance** — walk through openings on a live
-  board, ideas first, with the real legal moves on the table.
-- **Skill evaluation** — a short tactics + endgame test with an honest,
-  evidence-based level estimate and a practice focus.
+## What you can do
 
-## Install
+- **Mate practice, 1–4 moves:** 14 verified starting positions (7 patterns plus mirrored variants). The plugin checks your move and plays a defending reply locally. An incorrect attempt leaves the position unchanged. Hints point to a piece without revealing its destination.
+- **Play Hermes:** choose White or Black and equal material, pawn, knight, rook, or queen odds. The handicap removes a piece from Hermes’s side.
+- Click a piece and a highlighted destination. Select any legal promotion piece. Flip the board, undo a turn, retry a puzzle, and resume previous games.
+- Inspect SAN move history and copy PGN from the panel. Ask for a position review when you want a conversational explanation.
 
-Copy this directory to `~/.hermes/plugins/chess-coach/` (or install it
-from the plugin catalog once listed), then:
+### When the LLM is used
 
-```bash
+Puzzle creation, moves, validation, defending replies, hints, takebacks, retries, and PGN display do **not** call the LLM. Your game move is saved and rendered before Hermes is asked for its reply. A normal game sends one request when the opponent must move; reviews and game hints send a request only when clicked. A failed opponent request can be retried with **Ask Hermes to move**. There is no automatic repeated prompting.
+
+## Install / update
+
+Put this folder at `~/.hermes/plugins/chess-coach`, then enable it:
+
+```sh
 hermes plugins enable chess-coach
 ```
 
-The only Python dependency is `python-chess` (`chess>=1.10,<2`),
-declared in `plugin.yaml`; Hermes asks for dependency consent and
-installs it on enable. No chess engine binary is required — the mate
-search is exhaustive legal-move search, fine for mate-in-1/2 training
-positions.
+Enable Chess Coach in Desktop **Capabilities → Plugins**. After an update, restart the Hermes gateway and run **Reload desktop plugins** from the command palette. The Python dependency is `chess>=1.10,<2`; the Desktop API uses the gateway’s FastAPI runtime. There is no external chess engine or separate frontend build.
 
-Try it:
+## Data and compatibility
 
-- "Teach me a checkmate pattern — give me a mate in 1 to solve."
-- "Play a game with me. You give knight odds."
-- "Explain the Italian Game on a live board, move by move."
-- "Test my chess level."
+Games are stored in a profile-scoped SQLite database, `plugin-data/chess-coach/coach.sqlite3`. Desktop actions and agent tools use the same transactions. Revisions reject stale UI actions; agent move requests include the revision too. Legacy `ctx.state` games are imported once, retaining IDs, starting positions and move histories. The original legacy file is left intact. `games.json` remains a compatibility mirror, not the authoritative store.
 
-## Desktop board pane
-
-The package also ships a Desktop half: a live board pane
-(`desktop/plugin.js`) backed by the plugin's own Python API
-(`dashboard/plugin_api.py`). After installing the package, enable the
-**Chess Coach** desktop plugin in **Capabilities → Plugins** (use
-**Rescan** if it does not appear). The pane shows the live position,
-status, last move and move list for the current game, updating as
-moves are played in chat. You can also play by clicking: select one
-of your pieces (legal targets light up), then click a destination —
-the pane asks the agent in chat to play that move through
-`chess_make_move`, so every move is still validated by the referee
-and the pane can never diverge from the real board. (Promotions are
-played as queens; ask in chat for an underpromotion.)
-
-Piece artwork in the board pane: the Cburnett chess pieces (by Colin
-M. L. Burnett, via the lichess project), licensed under CC BY-SA 3.0 /
-GFDL / BSD.
+No telemetry or external network service is used by the chess backend. Conversational actions go through the active Hermes chat and its configured provider. Local practice remains available when that provider is busy or rate limited, provided the Hermes gateway is running.
 
 ## Tools
 
-| Tool | What it does |
-| --- | --- |
-| `chess_new_game` | Start a game, optionally with handicap odds (pawn / knight / rook / queen). |
-| `chess_set_position` | Create a game from any valid FEN (puzzles, drills, user positions). |
-| `chess_board` | ASCII board, FEN, move history, objective status. |
-| `chess_list_games` | List stored games. |
-| `chess_legal_moves` | All legal moves (SAN + UCI), optionally for one square. |
-| `chess_make_move` | Play a SAN/UCI move with full legality validation; reports check/mate/draw. |
-| `chess_undo` | Take back plies (retry-friendly lessons). |
-| `chess_review_position` | Read-only look at an earlier position, without rewinding the live game. |
-| `chess_solve_mate` | Exhaustive forced-mate search up to mate in 2. |
-| `chess_material` | Material count, balance and captured pieces. |
-| `chess_pgn` | Export the game as PGN. |
+The existing eleven tools remain available: `chess_new_game`, `chess_set_position`, `chess_board`, `chess_list_games`, `chess_legal_moves`, `chess_make_move`, `chess_undo`, `chess_review_position`, `chess_solve_mate`, `chess_material`, and `chess_pgn`.
 
-## Disclosures
+`chess_solve_mate` accepts 1–4 attacker moves. It uses bounded exact search: a search limit returns **inconclusive**, never a false “no mate.” Arbitrary complex positions can exceed that limit. The bundled catalog is verified by regression tests. Hermes provides conversational coaching; there is no numerical engine evaluation, formal rating, or automatic blunder detection. Structured opening lessons and strategic coaching are future extensions.
 
-- **No network access.** The plugin makes no network calls and has no
-  telemetry. It never fetches games or anything else from the internet.
-- **Local state only.** Game records (start FEN + SAN move list) are
-  stored in Hermes' plugin state for the active profile
-  (`ctx.state`), so lessons can resume across sessions. Nothing leaves
-  the machine except what the agent itself says in chat.
-- **No credentials, no engine, no shell.** No env vars, no API keys, no
-  subprocesses, no bundled binaries. The single dependency is the
-  well-known `python-chess` library, pinned with an upper bound.
-- **Deterministic core.** Every rules answer (legality, check, mate,
-  draw, material) is computed, so the agent's coaching is grounded in
-  the real position.
+## Development and checks
 
-## Limitations
+```sh
+python -m unittest discover -s tests -v
+node --check desktop/plugin.js
+npm install
+npm test
+```
 
-- The mate search covers mate in 1 and mate in 2; it is a training
-  verifier, not an analysis engine. There is no Stockfish integration
-  in this version.
-- Skill evaluation is a coaching estimate based on the built-in test,
-  not an official rating.
+Python tests require `chess`, `fastapi`, and `httpx`. JavaScript tests use React, Testing Library and jsdom in a mocked host; they assert English/Japanese behavior, local puzzle operations with zero chat submissions, and one opponent notification for a game move. See [MAC-TEST.md](MAC-TEST.md) for the native smoke checks.
 
-## License
+## License and artwork
 
-MIT
+Plugin code: MIT. Existing piece artwork: Cburnett chess pieces by Colin M. L. Burnett, via lichess, offered under CC BY-SA 3.0 / GFDL / BSD. The SVG artwork has been retained; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

@@ -5,7 +5,7 @@ CHESS_NEW_GAME = {
     "description": (
         "Start a new chess game and return its game_id and starting board. "
         "Optionally apply handicap odds: one side gives odds by removing a "
-        "piece (knight = b1/g1 knight, rook = a1/a8 rook, queen, or the "
+        "piece (knight = b1/b8 knight, rook = a1/a8 rook, queen, or the "
         "f-pawn) before the game starts. Use this to begin a game the user "
         "plays against the agent, or to set up a practice game."
     ),
@@ -134,7 +134,7 @@ CHESS_UNDO = {
 CHESS_SOLVE_MATE = {
     "name": "chess_solve_mate",
     "description": (
-        "Search the current position for a forced checkmate in 1 or 2 moves "
+        "Search the current position for a forced checkmate in 1 to 4 moves "
         "for the side to move, by exhaustive legal-move search (no engine "
         "needed). Returns the mating line in SAN if one exists, or "
         "mate_in: null. Use it to verify checkmate-practice answers and to "
@@ -146,8 +146,8 @@ CHESS_SOLVE_MATE = {
             "game_id": {"type": "string", "description": "The game_id."},
             "max_moves": {
                 "type": "integer",
-                "enum": [1, 2],
-                "description": "Search depth in full moves: 1 or 2. Default 2.",
+                "enum": [1, 2, 3, 4],
+                "description": "Maximum attacker moves: 1 to 4. Default 2. Bounded search may return inconclusive.",
             },
         },
         "required": ["game_id"],
@@ -219,4 +219,13 @@ CHESS_LIST_GAMES = {
         "game the user wants to resume."
     ),
     "parameters": {"type": "object", "properties": {}, "required": []},
+}
+
+
+CHESS_NEW_GAME["parameters"]["properties"]["user_color"] = {
+    "type": "string", "enum": ["white", "black"],
+    "description": "The human player's color; the desktop only enables their moves."
+}
+CHESS_MAKE_MOVE["parameters"]["properties"]["expected_revision"] = {
+    "type": "integer", "description": "Revision from chess_board. Reject stale requests instead of playing after a user undo."
 }

@@ -13,7 +13,7 @@ board from the tools, and play every move (yours and the user's) through
 
 ## Ground rules
 
-- Show the board from `chess_board` after every move: use the
+- For a Desktop board request, do not repeat an ASCII board: the panel updates locally. Give at most one sentence unless explanation is requested. For chat-only play, show the board from `chess_board`: use the
   `board_unicode` field (real piece glyphs) inside a code block so it
   renders as a proper board, with the last move and the status
   (check / mate / draw) the tool reported.
@@ -109,3 +109,12 @@ is a rough coaching estimate, not an official rating.
 - Do not keep a shadow board in your head across a long session;
   re-read `chess_board` whenever unsure.
 - Do not play moves for the user in their practice games unless asked.
+
+
+## Desktop integration and language
+
+- Default to English; honor an explicit Japanese language request from the panel or user.
+- Desktop puzzle creation, moves, defending replies, hints, undo and PGN are handled locally. Do not replay a user move that the panel has already saved.
+- A "Your turn" request means read `chess_board`, choose ONE move from `chess_legal_moves`, and call `chess_make_move` with the current `expected_revision`. Never play the human's next move. If the revision changed, read the board again rather than repeating the stale action.
+- In a review request, do not change the live board.
+- Mate search now supports 1–4 moves with a bounded search. `status: inconclusive` is not proof of no mate. Do not present unverified generated positions as puzzles.

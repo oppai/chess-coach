@@ -1,0 +1,8 @@
+{
+  "name": "hermes-chess-coach-tests",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node tests/ui.mjs"},
+  "devDependencies": {"react": "^19.0.0", "react-dom": "^19.0.0", "@testing-library/react": "^16.0.0", "jsdom": "^26.0.0"}
+}

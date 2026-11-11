@@ -1,13 +1,9 @@
-// Chess Coach — desktop board pane.
-// The board's truth lives in the agent-side chess_* tools; this pane
-// renders the position they mirror through the plugin backend
-// (ctx.rest '/games'). Clicking a move does not touch the board
-// directly: it asks the agent in chat to play the move through
-// chess_make_move, so every move is validated by the referee and the
-// pane can never diverge.
+// Chess Coach — native board with local, authoritative move handling.
+// Desktop REST and agent tools share a transactional referee store.
+// Puzzle interactions never invoke the LLM; game replies and explicit reviews do.
 
 import { host} from '@hermes/plugin-sdk'
-import { useEffect, useState} from 'react'
+import { useEffect, useState, useRef} from 'react'
 import { jsx, jsxs} from 'react/jsx-runtime'
 
 const GLYPHS = {
@@ -53,25 +49,29 @@ board.push(cells)
 return board
 }
 
-function statusText(game) {
-const s = game.status || {}
-if (s.is_checkmate) return 'Checkmate · ' + (s.result || '')
-if (s.is_stalemate) return 'Stalemate · draw'
-if (s.is_insufficient_material) return 'Draw · insufficient material'
-if (s.is_game_over) return 'Game over · ' + (s.result || '')
-const turn = s.turn === 'black'? 'Black': 'White'
-return turn + ' to move' + (s.is_check? ' · check!': '')
+function statusText(game, t) {
+  const s = game.status || {}
+  if (s.is_checkmate) return t("チェックメイト · ") + (s.result || '')
+  if (s.is_stalemate) return t("引き分け · ステイルメイト")
+  if (s.is_insufficient_material) return t("引き分け · 駒不足")
+  if (s.is_game_over) return t("対局終了 · ") + (s.result || '')
+  return (s.turn === 'black' ? t("黒") : t("白")) + t("の手番") + (s.is_check ? t(" · チェック") : '')
 }
 
-function movePairs(moves) {
-const out = []
-for (let i = 0; i < moves.length; i += 2) {
-out.push(String(i / 2 + 1) + '. ' + moves[i] + (moves[i + 1]? ' ' + moves[i + 1]: ''))
-}
-return out
+function movePairs(moves, startFen) {
+  const parts = (startFen || '').split(' ')
+  let number = Number(parts[5]) || 1
+  let black = parts[1] === 'b'
+  const out = []
+  for (const move of moves) {
+    out.push(`${number}${black ? '…' : '.'} ${move}`)
+    if (black) number++
+    black = !black
+  }
+  return out
 }
 
-function Board({ game, sel, targets, onSquare, pending}) {
+function Board({ game, sel, targets, onSquare, pending, flipped, t}) {
 const [hoverSq, setHoverSq] = useState(null)
 const board = parseFen(game.fen)
 if (!board) {
@@ -80,8 +80,10 @@ return jsx('div', { className: 'text-sm', children: 'No position yet.'})
 const turn = (game.status && game.status.turn) || 'white'
 const over =!!(game.status && game.status.is_game_over)
 const squares = []
-for (let r = 0; r < 8; r++) {
-for (let f = 0; f < 8; f++) {
+for (let ri = 0; ri < 8; ri++) {
+for (let fi = 0; fi < 8; fi++) {
+const r = flipped ? 7 - ri : ri
+const f = flipped ? 7 - fi : fi
 const piece = board[r][f]
 const name = FILES[f] + String(8 - r)
 const dark = (r + f) % 2 === 1
@@ -91,27 +93,39 @@ piece &&!over && (turn === 'white') === isWhitePiece
 const isSel = sel === name
 const target = targets.find((t) => t.to === name)
 const isPending = !!pending && (pending.from === name || pending.to === name)
+const last = game.last_move_uci && (game.last_move_uci.slice(0,2) === name || game.last_move_uci.slice(2,4) === name)
+const checkedKing = game.status?.is_check && piece === (turn === 'white' ? 'K' : 'k')
 const hot = hoverSq === name && (ownPiece || !!target)
 squares.push(
-jsx(
-'div',
+jsxs(
+'button',
 {
+type: 'button',
+'aria-label': name + (piece ? ' ' + ({K:t("白キング"),Q:t("白クイーン"),R:t("白ルーク"),B:t("白ビショップ"),N:t("白ナイト"),P:t("白ポーン"),k:t("黒キング"),q:t("黒クイーン"),r:t("黒ルーク"),b:t("黒ビショップ"),n:t("黒ナイト"),p:t("黒ポーン")}[piece]) : t(" 空きマス")),
+'aria-pressed': isSel,
+disabled: !!pending || over,
 onClick: () => onSquare(name, piece),
+onKeyDown: event => {
+  if (event.key === 'Escape') { onSquare(name, piece); return }
+  const delta = {ArrowLeft:-1,ArrowRight:1,ArrowUp:-8,ArrowDown:8}[event.key]
+  if (delta) { event.preventDefault(); const buttons = Array.from(event.currentTarget.parentElement.children); const index = buttons.indexOf(event.currentTarget); buttons[(index + delta + 64) % 64]?.focus() }
+},
 onMouseEnter: () => setHoverSq(name),
 onMouseLeave: () => setHoverSq(null),
 style: {
+border: 0, padding: 0, minWidth: 0,
 position: 'relative',
 display: 'flex',
 alignItems: 'center',
 justifyContent: 'center',
 aspectRatio: '1',
-backgroundColor: hot
-? 'color-mix(in srgb, var(--ui-accent) 62%, transparent)'
+backgroundColor: checkedKing ? '#dc8875' : last ? (dark ? '#a4ae6e' : '#d7dca3') : hot
+? '#b7cba4'
 : dark
-? 'color-mix(in srgb, var(--ui-accent) 42%, transparent)'
-: 'color-mix(in srgb, var(--ui-accent) 10%, transparent)',
+? '#789183'
+: '#e4e8da',
 boxShadow: isSel
-? 'inset 0 0 0 3px var(--ui-accent)'
+? 'inset 0 0 0 3px #e5b94e'
 : isPending
 ? 'inset 0 0 0 3px #e8b93e'
 : target
@@ -121,23 +135,23 @@ cursor: ownPiece || target? 'pointer': 'default',
 userSelect: 'none'
 },
 children: [
-f === 0
+fi === 0
 ? jsx('span', {
 style: {
 position: 'absolute', top: '2px', left: '4px',
-fontSize: 'max(22px, 3.8cqw)', lineHeight: '1', fontWeight: '700',
-color: 'var(--ui-text-secondary)',
+fontSize: 'clamp(10px, 2cqw, 14px)', lineHeight: '1', fontWeight: '700',
+color: '#334c40',
 pointerEvents: 'none'
 },
 children: String(8 - r)
 })
 : null,
-r === 7
+ri === 7
 ? jsx('span', {
 style: {
 position: 'absolute', bottom: '2px', right: '4px',
-fontSize: 'max(22px, 3.8cqw)', lineHeight: '1', fontWeight: '700',
-color: 'var(--ui-text-secondary)',
+fontSize: 'clamp(10px, 2cqw, 14px)', lineHeight: '1', fontWeight: '700',
+color: '#334c40',
 pointerEvents: 'none'
 },
 children: FILES[f]
@@ -148,7 +162,7 @@ target && !piece
 style: {
 position: 'absolute',
 width: '26%', height: '26%', borderRadius: '50%',
-backgroundColor: 'color-mix(in srgb, var(--ui-accent) 55%, transparent)',
+backgroundColor: 'rgba(30,60,40,.38)',
 pointerEvents: 'none'
 },
 children: ''
@@ -157,9 +171,9 @@ children: ''
 piece && PIECE_ART[piece]
 ? jsx('img', {
 src: PIECE_ART[piece],
-alt: piece,
+alt: '',
 draggable: false,
-style: { width: '100%', height: '100%', transform: 'scale(1.14)', filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.45))', pointerEvents: 'none' }
+style: { width: '100%', height: '100%', transform: 'scale(.88)', filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.45))', pointerEvents: 'none' }
 })
 : piece
 ? jsx('span', {
@@ -196,225 +210,291 @@ children: squares
 })
 }
 
+const CSS = `
+.cc {height:100%;overflow:auto;box-sizing:border-box;padding:18px;color:var(--ui-text-primary,#edf2ef);font:13px/1.5 system-ui,sans-serif;container-type:inline-size}
+.cc * {box-sizing:border-box}.cc button,.cc select {font:inherit}.cc button:focus-visible,.cc select:focus-visible {outline:2px solid #a8ceb4;outline-offset:2px}
+.cc-head,.cc-row {display:flex;align-items:center;justify-content:space-between;gap:10px}.cc-head {margin-bottom:18px}.cc-title {font-size:19px;font-weight:650;letter-spacing:-.5px}.cc-small {font-size:12px;color:var(--ui-text-secondary,#adb9b3)}
+.cc-btn,.cc select {border:1px solid var(--ui-stroke-secondary,#39463f);border-radius:8px;background:var(--ui-bg-secondary,#202824);color:inherit;padding:8px 11px;cursor:pointer}.cc .cc-btn:disabled {opacity:.45;cursor:default}.cc-board button:disabled {opacity:1}.cc-primary {background:#bdd9bd;color:#1d3326;border-color:#bdd9bd;font-weight:650}.cc-card {padding:14px;border:1px solid var(--ui-stroke-secondary,#39463f);border-radius:12px;margin-bottom:14px}.cc-tabs {display:flex;gap:6px;margin-bottom:14px}.cc-tabs button {flex:1}.cc-active {background:#bdd9bd;color:#1d3326}.cc-fields {display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.cc label {display:grid;gap:5px;font-size:12px}.cc select {width:100%;min-width:0}.cc-status {border-left:3px solid #bdd9bd;padding:2px 0 2px 12px;margin:14px 0}.cc-board {width:min(100%,620px,max(240px,calc(100vh - 470px)));margin:0 auto}.cc-tools {display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}.cc-message {padding:10px 12px;border-radius:8px;background:var(--ui-bg-secondary,#202824);margin:10px 0}.cc-error {color:#ffc6a6}.cc-history {max-height:120px;overflow:auto;font:12px/1.9 ui-monospace,monospace;word-spacing:6px;margin-top:8px}.cc-empty {padding:26px 8px;text-align:center}.cc details {margin-top:16px}.cc summary {cursor:pointer;color:var(--ui-text-secondary,#adb9b3)}
+@container (max-width:310px) {.cc-fields {grid-template-columns:1fr}.cc-head {align-items:flex-start}.cc-title {font-size:17px}.cc-btn {padding:7px 9px}}
+`
+const EN = {
+  "チェックメイト · ": "Checkmate · ",
+  "引き分け · ステイルメイト": "Draw · Stalemate",
+  "引き分け · 駒不足": "Draw · Insufficient material",
+  "対局終了 · ": "Game over · ",
+  "黒": "Black",
+  "白": "White",
+  "の手番": " to move",
+  " · チェック": " · Check",
+  "白キング": "White king",
+  "白クイーン": "White queen",
+  "白ルーク": "White rook",
+  "白ビショップ": "White bishop",
+  "白ナイト": "White knight",
+  "白ポーン": "White pawn",
+  "黒キング": "Black king",
+  "黒クイーン": "Black queen",
+  "黒ルーク": "Black rook",
+  "黒ビショップ": "Black bishop",
+  "黒ナイト": "Black knight",
+  "黒ポーン": "Black pawn",
+  " 空きマス": " Empty square",
+  "盤面に接続できません。接続を再確認しています。": "Cannot connect to the board. Reconnecting…",
+  "応答を確認できませんでした。チャットと盤面を確認してから操作してください。": "No update received. Check the chat and board before trying again.",
+  "チャットに依頼しました。回答は左側で確認できます。": "Request sent. Follow the response in your chat.",
+  "送信できませんでした。チャットを開いてからもう一度お試しください。": "Could not send. Open a chat and try again.",
+  "一手ずつ、強くなる。": "Better, one move at a time.",
+  "閉じる": "Close",
+  "＋ 新しく始める": "＋ New session",
+  "詰めチェス": "Mate practice",
+  "対戦": "Play a game",
+  "相手の最善の応手を考えて、チェックメイトを見つけよう。": "Find checkmate against your opponent’s best defense.",
+  "今のチャットのHermesと対戦。相手の駒を減らして練習できます。": "Play against Hermes in your current chat. Give yourself a head start with piece odds.",
+  "詰めるまでの自分の手数": "Your moves to checkmate",
+  "1手詰め": "Mate in 1",
+  "2手詰め": "Mate in 2",
+  "3手詰め · 準備中": "Mate in 3 · Coming soon",
+  "4手詰め · 準備中": "Mate in 4 · Coming soon",
+  "あなたの色": "Your color",
+  "白 · 先手": "White · First move",
+  "黒 · 後手": "Black · Second move",
+  "相手の駒落ち": "Opponent’s handicap",
+  "なし（平手）": "None (equal material)",
+  "ポーン落ち": "Pawn odds",
+  "ナイト落ち": "Knight odds",
+  "ルーク落ち": "Rook odds",
+  "クイーン落ち": "Queen odds",
+  "問題を出してもらう →": "Create a puzzle →",
+  "対戦を始める →": "Start a game →",
+  "検証対応：1〜2手。3〜4手は今後追加予定です。": "Verified puzzles: mate in 1–2. Mate in 3–4 is planned.",
+  "盤面を読み込み中…": "Loading the board…",
+  "対局・練習の履歴": "Games & practice",
+  "対局 ": "Game ",
+  "終了": "Finished",
+  "進行中": "In progress",
+  "Hermesに依頼中… チャットの応答をお待ちください": "Waiting for Hermes… Follow the response in your chat.",
+  " の駒を選択中 · 移動先を選んでください": " selected · Choose a destination",
+  "おつかれさまでした。局面を振り返ってみましょう。": "Well played. Take a moment to review the position.",
+  "駒を選んで、移動先をクリック": "Select a piece, then choose a destination",
+  "↕ 反転": "↕ Flip",
+  "盤面を反転": "Flip board",
+  "昇格する駒": "Promotion piece",
+  "昇格する駒を選択": "Choose a promotion piece",
+  "クイーン": "Queen",
+  "ルーク": "Rook",
+  "ビショップ": "Bishop",
+  "ナイト": "Knight",
+  "キャンセル": "Cancel",
+  "合法手情報がありません。Hermesを再起動してください。": "Legal moves unavailable. Please restart Hermes.",
+  "ヒント": "Hint",
+  "答えの手は明かさず、考えるヒントを1つください。": "Give me one thinking hint without revealing the move.",
+  "一手戻す": "Undo one move",
+  "局面を振り返る": "Review position",
+  "この局面のポイントを短く解説して。盤面は変更しないで。": "Briefly explain the key ideas in this position. Do not change the board.",
+  "棋譜 · ": "Moves · ",
+  " 半手": " plies",
+  " · 最終手 ": " · Last move ",
+  "まだ指されていません。": "No moves yet.",
+  "PGNをチャットに表示": "Show PGN in chat",
+  "chess_pgnで棋譜を表示して。": "Show the game using chess_pgn.",
+  "まずは1手詰めから。上の設定で練習を始めましょう。": "Start with mate in 1. Use the settings above to begin.",
+  "盤面で指す · チャットで学ぶ": "Play on the board · Learn in chat"
+}
 function ChessPane() {
-const [data, setData] = useState(null)
-const [selGame, setSelGame] = useState(null)
-const [selSq, setSelSq] = useState(null)
-const [note, setNote] = useState(null)
-const [err, setErr] = useState(null)
-const [thinking, setThinking] = useState(null)
+  const [language, setLanguage] = useState(() => {
+    try { return localStorage.getItem('chess-coach.language') === 'ja' ? 'ja' : 'en' } catch (_) { return 'en' }
+  })
+  const t = text => language === 'ja' ? text : (EN[text] || text)
+  const changeLanguage = value => {
+    setLanguage(value)
+    try { localStorage.setItem('chess-coach.language', value) } catch (_) {}
+    setNote('')
+  }
 
-useEffect(() => {
-let alive = true
-const load = async () => {
-try {
-const d = await CTX.rest('/games')
-if (alive) {
-setData(d)
-setErr(null)
+  const [data, setData] = useState(null)
+  const [selected, setSelected] = useState(null)
+  const [square, setSquare] = useState(null)
+  const [error, setError] = useState(null)
+  const [note, setNote] = useState('')
+  const [pending, setPending] = useState(null)
+  const [promotion, setPromotion] = useState(null)
+  const [setup, setSetup] = useState(false)
+  const [mode, setMode] = useState('puzzle')
+  const [depth, setDepth] = useState('1')
+  const [odds, setOdds] = useState('knight')
+  const [side, setSide] = useState('white')
+  const [flipped, setFlipped] = useState(false)
+  const actionLock = useRef(false)
+  const generation = useRef(0)
+  const [scope, setScope] = useState(0)
+  useEffect(() => {
+    let previous = host.state?.profile?.get?.()
+    return host.state?.profile?.subscribe?.(value => {
+      if (value === previous) return
+      previous = value; generation.current++; actionLock.current = false
+      setData(null); setSelected(null); setPending(null); setNote(''); setError(null); setScope(v=>v+1)
+    })
+  }, [])
+  const [pgn, setPgn] = useState('')
+  const [hostBusy, setHostBusy] = useState(false)
+  const currentSession = () => host.state?.focusedSessionId?.get?.() ?? null
+  const games = data?.games || []
+  const game = games.find(g => g.game_id === selected) || games[games.length - 1]
+  const t2 = (en, ja) => language === 'ja' ? ja : en
+  const errors = {
+    stale_position: t2('The position changed. Please try again.', '局面が更新されました。もう一度操作してください。'),
+    try_again: t2('That move does not force mate in the remaining moves. Try another!', 'その手では残りの手数で詰みません。別の手を考えてみましょう。'),
+    search_limit: t2('This line could not be verified in time. The board is unchanged; try another move.', '制限時間内に検証できませんでした。盤面は変更していません。別の手をお試しください。'),
+    opponent_turn: t2('It is Hermes’s turn.', 'Hermesの手番です。'),
+    illegal_move: t2('That move is not legal.', 'その手は指せません。'),
+    no_mate_found: t2('No forced mate was found.', '強制的な詰みが見つかりませんでした。')
+  }
+  useEffect(() => {
+    let alive = true, loading = false
+    const load = async () => {
+      if (loading || actionLock.current) return
+      loading = true
+      const version = generation.current
+      try {
+        const result = await CTX.rest('/games')
+        if (!result || !Array.isArray(result.games)) throw new Error('Invalid response')
+        if (alive && version === generation.current) {
+          setData(result)
+          setError(result.api_version === 2 ? null : 'upgrade')
+        }
+      } catch (_) { if (alive) setError('connection') }
+      finally { loading = false }
+    }
+    load()
+    const timer = setInterval(load, 1500)
+    let off
+    try { off = host.onEvent('plugin.chess-coach.game.updated', load) } catch (_) {}
+    return () => { alive = false; clearInterval(timer); if (typeof off === 'function') off() }
+  }, [scope])
+  useEffect(() => {
+    const update = () => {
+      const sid = currentSession()
+      setHostBusy(!!host.state?.busyBySession?.get?.()?.[sid])
+    }
+    update()
+    const unsubs = ['busyBySession', 'focusedSessionId'].map(key => host.state?.[key]?.subscribe?.(update)).filter(Boolean)
+    return () => unsubs.forEach(off => off())
+  }, [])
+  useEffect(() => { setNote('') }, [game?.game_id])
+  useEffect(() => { setSquare(null); setPromotion(null); setPgn('') }, [game?.game_id, game?.fen])
+  useEffect(() => {
+    if (!pending || pending.kind !== 'ai') return
+    const updated = games.find(g => g.game_id === pending.gameId)
+    if (updated && (updated.status.is_game_over || updated.status.turn === updated.user_color)) setPending(null)
+  }, [data, pending])
+  useEffect(() => {
+    if (!pending || pending.kind !== 'ai') return
+    const timer = setTimeout(() => {
+      setPending(null)
+      setNote(t('応答を確認できませんでした。チャットと盤面を確認してから操作してください。'))
+    }, 90000)
+    return () => clearTimeout(timer)
+  }, [pending])
+  const applyGame = updated => setData(old => ({api_version:2,games:(old?.games || []).some(g=>g.game_id===updated.game_id)
+    ? old.games.map(g=>g.game_id===updated.game_id ? updated : g) : [...(old?.games || []),updated]}))
+  const requestAI = async (position, explanation = null) => {
+    if (pending?.kind === 'ai') return
+    if (hostBusy) { setNote(t2('Hermes is busy. Wait for the current response.', 'Hermesが応答中です。現在の処理が終わるまでお待ちください。')); return }
+    const sid = currentSession()
+    const text = explanation || (language === 'ja'
+      ? `対局 ${position.game_id} はあなたの手番です。chess_boardで確認し、chess_legal_movesから1手選んでchess_make_moveで指してください。expected_revision=${position.revision}。私は${position.user_color}。私の手は指さないでください。盤面の再掲は不要、コメントは一文で。`
+      : `Your turn in game ${position.game_id}. Read chess_board, choose one legal move from chess_legal_moves, and play it using chess_make_move with expected_revision=${position.revision}. I play ${position.user_color}. Do not play my moves. No ASCII board; at most one sentence of commentary.`)
+    try {
+      const accepted = await host.composer.submit(sid, text + (language === 'ja' ? '\n日本語で回答してください。' : '\nRespond in English.'))
+      if (accepted === false) throw new Error('No composer')
+      if (!explanation) setPending({kind:'ai',gameId:position.game_id})
+      else setNote(t('チャットに依頼しました。回答は左側で確認できます。'))
+    } catch (_) { setNote(t('送信できませんでした。チャットを開いてからもう一度お試しください。')); setPending(null) }
+  }
+  const perform = async (action, extra = {}) => {
+    if (actionLock.current || error) return null
+    actionLock.current = true
+    const requestGeneration = ++generation.current
+    setPending({kind:'local'}); setNote('')
+    const sid = currentSession()
+    try {
+      const response = await CTX.rest('/action',{method:'POST',body:{action,...(game ? {game_id:game.game_id,expected_revision:game.revision ?? 0} : {}),...extra},timeoutMs:10000})
+      if (generation.current !== requestGeneration) return null
+      if (response.game) applyGame(response.game)
+      if (response.error) { setNote(errors[response.error] || t2('This action could not be completed. Refresh and try again.', '操作できませんでした。局面を確認してもう一度お試しください。')); return null }
+      if (response.feedback) setNote(response.feedback === 'solved' ? t2('Checkmate! Nicely done.', 'チェックメイト！お見事です。') : t2('Good move. The defender has replied — keep going!', '正しい手です。相手が応じました。続きを考えましょう！'))
+      if (response.hint_square) setNote(t2('Look at the piece on ', 'このマスの駒に注目：') + response.hint_square)
+      if (response.pgn) setPgn(response.pgn)
+      return {...response, session:sid}
+    } catch (_) { setNote(t2('Could not confirm the action. The board will refresh automatically; check it before retrying.', '操作結果を確認できませんでした。自動更新された盤面を確認してから再試行してください。')); return null }
+    finally { if (generation.current === requestGeneration) { actionLock.current = false; generation.current++; setPending(null) } }
+  }
+  const maybeReply = response => {
+    if (!response?.game) return
+    const g = response.game
+    if (g.mode === 'game' && !g.status.is_game_over && g.status.turn !== g.user_color) {
+      if (currentSession() === response.session) requestAI(g)
+      else setNote(t2('Chat changed. Use “Ask Hermes to move” in your intended chat.', 'チャットが切り替わりました。対戦するチャットで「Hermesに指してもらう」を押してください。'))
+    }
+  }
+  const start = async () => {
+    const response = await perform(mode === 'puzzle' ? 'new_puzzle' : 'new_game',mode === 'puzzle'
+      ? {depth:Number(depth),previous_puzzle:game?.puzzle?.id || null}
+      : {odds,odds_giver:side==='white'?'black':'white',user_color:side,name:language==='ja'?'Hermesとの対戦':'Game with Hermes'})
+    if (response?.game) { setSelected(response.game.game_id); setSetup(false); setFlipped(response.game.user_color === 'black'); maybeReply(response) }
+  }
+  const legal = game?.legal_moves || []
+  const targets = square ? legal.filter(m => m.from === square) : []
+  const opponentTurn = game?.user_color && game.status?.turn !== game.user_color && !game.status?.is_game_over
+  const move = async m => {
+    setPromotion(null); setSquare(null)
+    maybeReply(await perform('move',{move:m.uci}))
+  }
+  const onSquare = (sq, piece) => {
+    if (pending || error || promotion || opponentTurn || game?.status?.is_game_over) return
+    const hits = targets.filter(m => m.to === sq)
+    if (hits.length > 1) { setPromotion(hits); return }
+    if (hits.length) { move(hits[0]); return }
+    const own = piece && ((game.status?.turn !== 'black') === (piece === piece.toUpperCase()))
+    setSquare(own && square !== sq ? sq : null)
+  }
+  const btn = (label, onClick, props = {}) => jsx('button', {type:'button', className:'cc-btn', disabled:!!pending || !!error, onClick, ...props, children:label},label)
+  const options = entries => entries.map(([value,label,disabled]) => jsx('option',{value,disabled,children:label},value))
+  const ask = text => requestAI(game, `game_id=${game.game_id}: ${text}`)
+  return jsxs('section', {className:'cc', 'aria-label':'Chess Coach', lang:language, children:[
+    jsx('style',{children:CSS}),
+    jsx('div',{className:'cc-row',style:{justifyContent:'flex-end',marginBottom:10},children:jsx('select',{'aria-label':'Language / 言語',style:{width:'auto'},value:language,disabled:!!pending,onChange:e=>changeLanguage(e.target.value),children:options([['en','English'],['ja','日本語']])})}),
+    jsxs('header',{className:'cc-head',children:[jsxs('div',{children:[jsx('div',{className:'cc-small',children:'HERMES · CHESS STUDIO'}),jsx('div',{className:'cc-title',children:t("一手ずつ、強くなる。")})]}),btn(setup ? t("閉じる") : t("＋ 新しく始める"),() => setSetup(!setup), {'aria-expanded':setup})]}),
+    error && jsx('div',{role:'alert',className:'cc-message cc-error',children:error === 'upgrade' ? t2('Backend update required. Restart the Hermes gateway to enable instant board actions.', '即時操作を有効にするには、Hermesゲートウェイを再起動してください。') : t('盤面に接続できません。接続を再確認しています。')}),
+    (setup || (data && !game)) && jsxs('div',{className:'cc-card',children:[
+      jsxs('div',{className:'cc-tabs',children:[btn(t("詰めチェス"),()=>setMode('puzzle'),{className:'cc-btn '+(mode==='puzzle'?'cc-active':''),'aria-pressed':mode==='puzzle'}),btn(t("対戦"),()=>setMode('game'),{className:'cc-btn '+(mode==='game'?'cc-active':''),'aria-pressed':mode==='game'})]}),
+      jsx('p',{className:'cc-small',children:mode==='puzzle'?t("相手の最善の応手を考えて、チェックメイトを見つけよう。"):t("今のチャットのHermesと対戦。相手の駒を減らして練習できます。")}),
+      jsxs('div',{className:'cc-fields',children:mode==='puzzle' ? [jsxs('label',{children:[t("詰めるまでの自分の手数"),jsx('select',{value:depth,onChange:e=>setDepth(e.target.value),children:options([['1',t("1手詰め")],['2',t("2手詰め")],['3',t2('Mate in 3','3手詰め')],['4',t2('Mate in 4','4手詰め')]])})]})] : [jsxs('label',{children:[t("あなたの色"),jsx('select',{value:side,onChange:e=>setSide(e.target.value),children:options([['white',t("白 · 先手")],['black',t("黒 · 後手")]])})]}),jsxs('label',{children:[t("相手の駒落ち"),jsx('select',{value:odds,onChange:e=>setOdds(e.target.value),children:options([['none',t("なし（平手）")],['pawn',t("ポーン落ち")],['knight',t("ナイト落ち")],['rook',t("ルーク落ち")],['queen',t("クイーン落ち")]])})]})]}),
+      btn(mode==='puzzle'?t("問題を出してもらう →"):t("対戦を始める →"),start,{className:'cc-btn cc-primary'}),
+      mode==='puzzle' && jsx('p',{className:'cc-small',children:t2('Verified mate-in-1–4 puzzles. Moves and replies run locally.', '検証済みの1〜4手詰め。着手と応手はローカルで処理します。')})
+    ]}),
+    !data && !error && jsx('p',{role:'status',children:t("盤面を読み込み中…")}),
+    game && !setup && jsxs('div',{children:[
+      jsxs('label',{className:'cc-small',children:[t("対局・練習の履歴"),jsx('select',{value:game.game_id,disabled:!!pending,onChange:e=>setSelected(e.target.value),children:[...games].reverse().map((g,i)=>jsx('option',{value:g.game_id,children:(g.puzzle ? t2('Mate in ','') + g.puzzle.depth + t2('','手詰め') : (g.name || t("対局 ")+(games.length-i)))+' · '+(g.status?.is_game_over?t("終了"):t("進行中"))},g.game_id))})]}),
+      jsxs('div',{className:'cc-row',children:[jsxs('div',{className:'cc-status',role:'status',children:[jsx('strong',{children:statusText(game, t)}),jsx('div',{className:'cc-small',children:pending ? (pending.kind === 'ai' ? t2('Hermes is thinking…', 'Hermesが考え中…') : t2('Updating the board…', '盤面を更新中…')) : opponentTurn ? t2('Waiting for Hermes’s move', 'Hermesの手番です') : square ? square+t(" の駒を選択中 · 移動先を選んでください") : game.status?.is_game_over ? t("おつかれさまでした。局面を振り返ってみましょう。") : t("駒を選んで、移動先をクリック")})]}),btn(t("↕ 反転"),()=>setFlipped(!flipped),{'aria-label':t("盤面を反転")})]}),
+      jsx('div',{className:'cc-board',children:jsx(Board,{game,sel:square,targets,onSquare,pending:pending || error || opponentTurn,flipped,t})}),
+      promotion && jsxs('div',{className:'cc-message',role:'group','aria-label':t("昇格する駒"),children:[jsx('strong',{children:t("昇格する駒を選択")}),jsx('div',{className:'cc-tools',children:promotion.map(m=>btn(({q:t("クイーン"),r:t("ルーク"),b:t("ビショップ"),n:t("ナイト")})[m.uci.slice(-1)],()=>move(m)))}),btn(t("キャンセル"),()=>setPromotion(null))]}),
+      !Array.isArray(game.legal_moves) && jsx('p',{className:'cc-error',children:t("合法手情報がありません。Hermesを再起動してください。")}),
+      jsxs('div',{className:'cc-tools',children:[btn(t("ヒント"),()=>game.mode === 'puzzle' ? perform('hint') : ask(t("答えの手は明かさず、考えるヒントを1つください。")),{disabled:!!pending || !!error || game.status?.is_game_over}),btn(t2('Undo turn','一手戻す'),()=>perform('undo'),{disabled:!!pending || !!error || !game.moves_san?.length}),btn(t("局面を振り返る"),()=>ask(t("この局面のポイントを短く解説して。盤面は変更しないで。")))]}),
+      game.mode === 'puzzle' && jsx('div',{className:'cc-tools',children:[btn(t2('Try again','最初から挑戦'),()=>perform('retry')),btn(t2('Next puzzle','次の問題'),async()=>{const r=await perform('new_puzzle',{depth:game.puzzle.depth,previous_puzzle:game.puzzle.id});if(r?.game)setSelected(r.game.game_id)})]}),
+      opponentTurn && btn(t2('Ask Hermes to move','Hermesに指してもらう'),()=>requestAI(game),{disabled:!!pending || !!error || hostBusy}),
+      jsxs('details',{children:[jsx('summary',{children:t2('Move history · ','棋譜 · ')+(game.moves_san || []).length+t2(' played','着手')+(game.last_move?t(" · 最終手 ")+game.last_move:'')}),jsx('div',{className:'cc-history',children:movePairs(game.moves_san || [], game.start_fen).join('   ') || t("まだ指されていません。")}),btn(t2('Show PGN','PGNを表示'),()=>perform('pgn'))]})
+    ]}),
+    data && !game && jsx('div',{className:'cc-empty cc-small',children:t("まずは1手詰めから。上の設定で練習を始めましょう。")}),
+    pgn && jsx('textarea',{'aria-label':'PGN',readOnly:true,value:pgn,rows:6,style:{width:'100%',fontFamily:'monospace'}}),
+    note && jsx('div',{role:'status',className:'cc-message',children:note}),
+    jsx('footer',{className:'cc-small',style:{marginTop:20},children:t("盤面で指す · チャットで学ぶ")})
+  ]})
 }
-} catch (e) {
-if (alive) setErr('Waiting for the chess backend…')
-}
-}
-load()
-const timer = setInterval(load, 2500)
-let off = null
-try {
-off = host.onEvent('plugin.chess-coach.game.updated', () => load())
-} catch (e) {
-off = null
-}
-return () => {
-alive = false
-clearInterval(timer)
-if (off) off()
-}
-}, [])
-useEffect(() => {
-if (!thinking || !data) return
-const g = (data.games || []).find((x) => x.game_id === thinking.gameId)
-if (!g || g.fen !== thinking.fen) setThinking(null)
-}, [data, thinking])
-useEffect(() => {
-if (!thinking) return
-const t = setTimeout(() => setThinking(null), 90000)
-return () => clearTimeout(t)
-}, [thinking])
-
-const games = (data && data.games) || []
-const game =
-games.find((g) => g.game_id === selGame) || games[games.length - 1] || null
-
-// Reset the piece selection whenever the position changes.
-const fen = game? game.fen: null
-useEffect(() => {
-setSelSq(null)
-}, [fen])
-
-const legal = (game && game.legal_moves) || []
-const targets = selSq? legal.filter((m) => m.from === selSq): []
-
-const boardNow = game? parseFen(game.fen): null
-const pieceAt = (sq) => {
-if (!boardNow) return null
-const f = FILES.indexOf(sq[0])
-const r = 8 - Number(sq[1])
-return boardNow[r]? boardNow[r][f]: null
-}
-const hasLegal = !!(game && Array.isArray(game.legal_moves))
-
-const onSquare = (name, piece) => {
-if (!game || (game.status && game.status.is_game_over)) return
-if (thinking) return
-const turn = (game.status && game.status.turn) || 'white'
-const isOwn = (pc) => !!pc && ((turn === 'white') === (pc === pc.toUpperCase()))
-// Completing a move: a second, non-own square was clicked.
-if (selSq && name !== selSq && !isOwn(piece)) {
-const hit = targets.find((t) => t.to === name)
-let uci = null
-let san = null
-if (hit) {
-const promo = targets.filter((t) => t.to === name && t.promotion)
-const chosen = promo.find((t) => t.uci.endsWith('q')) || promo[0] || hit
-uci = chosen.uci
-san = chosen.san
-} else if (!hasLegal) {
-// Backend sent no legal moves (stale gateway): compose the UCI
-// from the two clicks and let the referee judge it.
-const fromPiece = pieceAt(selSq)
-uci = selSq + name
-if ((fromPiece === 'P' && name[1] === '8') || (fromPiece === 'p' && name[1] === '1')) uci += 'q'
-san = uci
-}
-if (uci) {
-const text = '盤面パネルから送信: game_id = ' + game.game_id + ' / UCI = ' + uci + ' を chess_make_move で指して。指したら盤面と一言コメントを返して。'
-try {
-host.composer.submit(null, text)
-setNote('送信しました: ' + san + '（エージェントが指します）')
-setThinking({ gameId: game.game_id, fen: game.fen, san, from: selSq, to: name })
-} catch (e) {
-setNote('送信できませんでした。チャットで直接指してください。')
-}
-setSelSq(null)
-return
-}
-}
-// Selecting one of the side-to-move's pieces.
-if (piece && isOwn(piece)) {
-setSelSq(selSq === name? null: name)
-return
-}
-setSelSq(null)
-}
-
-return jsxs('div', {
-className: 'flex h-full flex-col gap-2 p-3',
-children: [
-jsxs('div', {
-className: 'flex items-baseline justify-between',
-children: [
-jsx('div', { className: 'font-medium', children: '♞ Chess Coach'}),
-jsx('div', {
-className: 'text-[0.75rem]',
-style: { color: 'var(--ui-text-tertiary)'},
-children: game? statusText(game): ''
-})
-]
-}),
-thinking
-? jsxs('div', {
-className: 'flex items-center gap-2 text-[0.8125rem]',
-style: { color: 'var(--ui-text-secondary)'},
-children: [
-jsx('span', { className: 'animate-pulse', style: { width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#e8b93e', display: 'inline-block' }, children: ''}),
-'AIが考え中…（' + thinking.san + ' を送信済み）'
-]
-})
-: null,
-games.length > 1
-? jsx('div', {
-className: 'flex flex-wrap gap-1',
-children: games.map((g) =>
-jsx(
-'button',
-{
-type: 'button',
-onClick: () => {
-setSelGame(g.game_id)
-setSelSq(null)
-},
-className: 'px-1.5 text-[0.6875rem]',
-style: {
-border: '1px solid var(--ui-stroke-secondary)',
-borderRadius: '999px',
-color:
-game && g.game_id === game.game_id
-? 'var(--ui-accent)'
-: 'var(--ui-text-secondary)'
-},
-children:
-(g.name || 'Game') + ' · ' + (g.moves_san || []).length + ' plies'
-},
-'g-' + g.game_id
-)
-)
-})
-: null,
-game
-? jsx(Board, { game, sel: selSq, targets, onSquare, pending: thinking && game && thinking.gameId === game.game_id? thinking: null})
-: jsx('div', {
-className: 'text-sm',
-style: { color: 'var(--ui-text-secondary)'},
-children:
-err ||
-'No game yet. Ask Hermes in chat: “Give me a mate-in-1 puzzle” or “Play a game — you give knight odds.” The board will appear here.'
-}),
-game
-? jsx('div', {
-className: 'text-[0.75rem]',
-style: { color: 'var(--ui-text-tertiary)'},
-children: note
-? note
-: hasLegal
-? '駒をクリック → 移動先をクリックで、チャット経由で指せます。'
-: '駒をクリック → 移動先をクリックで指せます（合法手ハイライトは Hermes 再起動後に有効）。'
-})
-: null,
-game && game.last_move
-? jsx('div', {
-className: 'text-[0.75rem]',
-style: { color: 'var(--ui-text-secondary)'},
-children: 'Last move: ' + game.last_move
-})
-: null,
-game && (game.moves_san || []).length > 0
-? jsx('div', {
-className: 'text-[0.75rem]',
-style: {
-color: 'var(--ui-text-secondary)',
-overflowY: 'auto',
-borderTop: '1px solid var(--ui-stroke-secondary)',
-paddingTop: '6px'
-},
-children: movePairs(game.moves_san).join(' ')
-})
-: null
-]
-})
-}
-
 export default {
-id: 'chess-coach',
-name: 'Chess Coach',
-register(ctx) {
-CTX = ctx
-ctx.register({
-id: 'board-pane',
-area: 'panes',
-title: 'Chess board',
-data: { placement: 'right', width: '350px'},
-render: () => jsx(ChessPane, {})
-})
-}
+  id:'chess-coach', name:'Chess Coach',
+  register(ctx) {
+    CTX = ctx
+    ctx.register({id:'board-pane',area:'panes',title:'Chess Coach',data:{placement:'right',width:'420px'},render:()=>jsx(ChessPane,{})})
+  }
 }

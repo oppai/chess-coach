@@ -1,11 +1,11 @@
 name: chess-coach
-version: 0.1.0
+version: 0.2.0
 manifest_version: 2
 api_version: 1
 description: >-
   Chess board tools for Hermes: create and manage games (including handicap
   odds), validate moves, detect check / checkmate / stalemate / draws, solve
-  mate-in-1 and mate-in-2 puzzles, and export PGN. The plugin only owns the
+  mate-in-1 through mate-in-4 puzzles, and export PGN. The plugin only owns the
   board — legal moves and game status are always computed, never guessed —
   while the agent decides what to do with it: checkmate practice, handicap
   games, opening and strategy guidance, tactics tests and skill evaluation.
