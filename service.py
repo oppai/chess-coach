@@ -16,6 +16,16 @@ def view(rec):
     result['legal_moves'] = [{'uci': m.uci(), 'san': board.san(m), 'from': chess.square_name(m.from_square), 'to': chess.square_name(m.to_square), 'promotion': bool(m.promotion)} for m in board.legal_moves]
     result['last_move'] = rec['moves'][-1] if rec['moves'] else None
     result['last_move_uci'] = board.peek().uci() if board.move_stack else None
+    if board.is_checkmate():
+        king = board.king(board.turn)
+        neighbors = chess.BB_KING_ATTACKS[king]
+        own_pieces = board.occupied_co[board.turn]
+        if not (neighbors & ~own_pieces):
+            result['mate_detail'] = 'blocked'
+        elif len(board.checkers()) > 1:
+            result['mate_detail'] = 'double_check'
+        else:
+            result['mate_detail'] = 'no_defense'
     result['created'] = rec.get('created', 0)
     return result
 
@@ -82,7 +92,14 @@ def action(args):
                 found = solve(board, max(1, remaining), seconds=2)
                 if not found['line_uci']:
                     return {'error': 'no_mate_found', 'game': view(rec)}
-                return {'hint_square': found['line_uci'][0][:2], 'game': view(rec)}
+                move = board.parse_uci(found['line_uci'][0])
+                if board.gives_check(move):
+                    idea = 'check'
+                elif board.is_capture(move):
+                    idea = 'capture'
+                else:
+                    idea = 'escape_squares'
+                return {'hint_idea': idea, 'hint_square': chess.square_name(move.from_square), 'game': view(rec)}
             elif kind == 'pgn':
                 return {'pgn': result(tools.chess_pgn({'game_id': rec['id']}))['pgn'], 'game': view(rec)}
             else:
@@ -98,7 +115,12 @@ def puzzle_move(rec, board, move):
     reply = None
     if not board.is_checkmate():
         if remaining <= 1 or board.is_game_over():
-            return {'error': 'try_again', 'game': view(rec)}
+            reason = 'defense'
+            if board.is_stalemate():
+                reason = 'stalemate'
+            elif remaining == 1 and not board.is_check():
+                reason = 'no_check'
+            return {'error': 'try_again', 'mistake': reason, 'game': view(rec)}
         deadline = time.monotonic() + 2
         longest = -1
         for defense in list(board.legal_moves):

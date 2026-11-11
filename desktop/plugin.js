@@ -343,6 +343,61 @@ const CSS = `
 .cc * {box-sizing:border-box}.cc button,.cc select {font:inherit}.cc button:focus-visible,.cc select:focus-visible {outline:2px solid #a8ceb4;outline-offset:2px}
 .cc-head,.cc-row {display:flex;align-items:center;justify-content:space-between;gap:10px}.cc-head {margin-bottom:18px}.cc-title {font-size:19px;font-weight:650;letter-spacing:-.5px}.cc-small {font-size:12px;color:var(--ui-text-secondary,#adb9b3)}
 .cc-btn,.cc select {border:1px solid var(--ui-stroke-secondary,#39463f);border-radius:8px;background:var(--ui-bg-secondary,#202824);color:inherit;padding:8px 11px;cursor:pointer}.cc .cc-btn:disabled {opacity:.45;cursor:default}.cc-board button:disabled {opacity:1}.cc-primary {background:#bdd9bd;color:#1d3326;border-color:#bdd9bd;font-weight:650}.cc-card {padding:14px;border:1px solid var(--ui-stroke-secondary,#39463f);border-radius:12px;margin-bottom:14px}.cc-tabs {display:flex;gap:6px;margin-bottom:14px}.cc-tabs button {flex:1}.cc-active {background:#bdd9bd;color:#1d3326}.cc-fields {display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.cc label {display:grid;gap:5px;font-size:12px}.cc select {width:100%;min-width:0}.cc-status {border-left:3px solid #bdd9bd;padding:2px 0 2px 12px;margin:14px 0}.cc-board {width:min(100%,620px,max(240px,calc(100vh - 470px)));margin:0 auto}.cc-tools {display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}.cc-message {padding:10px 12px;border-radius:8px;background:var(--ui-bg-secondary,#202824);margin:10px 0}.cc-error {color:#ffc6a6}.cc-history {max-height:120px;overflow:auto;font:12px/1.9 ui-monospace,monospace;word-spacing:6px;margin-top:8px}.cc-empty {padding:26px 8px;text-align:center}.cc details {margin-top:16px}.cc summary {cursor:pointer;color:var(--ui-text-secondary,#adb9b3)}
+.cc-thinking {display:flex;align-items:center;gap:12px;padding:14px;margin:0 0 12px;border:1px solid #bdd9bd;border-radius:10px;background:var(--ui-bg-secondary,#202824)}.cc-spinner {width:22px;height:22px;flex-shrink:0;border:3px solid #52665a;border-top-color:#bdd9bd;border-radius:50%;animation:cc-spin 1s linear infinite}@keyframes cc-spin {to {transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce) {.cc-spinner {animation:none}}
+.cc-board {position:relative;container-type:inline-size;isolation:isolate}
+.cc-feedback {margin:0 0 10px;padding:10px 12px;border:1px solid var(--ui-stroke-secondary,#39463f);border-radius:8px;background:var(--ui-bg-secondary,#202824)}
+.cc-feedback p {margin:3px 0 0}
+.cc-board-notice {
+  position:absolute;z-index:1;top:8px;left:50%;transform:translateX(-50%);
+  width:max-content;max-width:calc(100% - 16px);margin:0;
+  padding:8px 12px;border:1px solid #a7deb89c;border-radius:8px;
+  color:#f5fff5;background:#142e22f5;box-shadow:0 3px 12px #0005;
+  text-align:center;pointer-events:none;
+}
+.cc-board-progress {animation:cc-board-progress 1.65s ease-out both}
+@keyframes cc-board-progress {0%,76% {opacity:1} 100% {opacity:0}}
+@media (prefers-reduced-motion:reduce) {.cc-board-progress {animation:none}}
+
+.cc-result,.cc-flash,.cc-confetti {position:absolute;inset:0;border-radius:6px}
+.cc-result {
+  z-index:2;display:grid;place-items:safe center;padding:12px;overflow:auto;
+  background:radial-gradient(ellipse at center,#11291df0,#092015b5);color:#f5fff5;
+}
+.cc-result-wrong {background:radial-gradient(ellipse at center,#361318f5,#310910b5);color:#fff2f2}
+.cc-result-card {
+  position:relative;z-index:2;width:min(100%,390px);padding:clamp(12px,5cqw,28px);
+  border:1px solid #a7deb89c;border-radius:14px;background:#142e22f5;text-align:center;
+  box-shadow:0 10px 36px #0008;overflow-wrap:anywhere;
+}
+.cc-result-wrong .cc-result-card {border-color:#ec9099;background:#401e24f7}
+.cc-result-title {display:block;font-size:clamp(15px,5cqw,25px);line-height:1.2}
+.cc-result-symbol {display:block;font-size:clamp(19px,7cqw,36px);line-height:1.05;margin-bottom:8px;color:#f9dd8e}
+.cc-result-wrong .cc-result-symbol {color:#ffb1b8}
+.cc-result-card p {margin:8px 0 0}
+.cc-result-actions {display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:14px}
+.cc-result-card .cc-btn {color:#f5fff5;background:#17392b;border-color:#90bba2}
+.cc-result-card .cc-primary {color:#172c20;background:#d2ead6;border-color:#d2ead6}
+.cc-result-wrong .cc-primary {color:#3b1219;background:#ffdae0;border-color:#ffdae0}
+.cc-flash,.cc-confetti {pointer-events:none;z-index:1;overflow:hidden}
+.cc-flash {background:#ef334d;animation:cc-flash .48s ease-out both}
+@keyframes cc-flash {from {opacity:.58} to {opacity:0}}
+.cc-confetti i {
+  position:absolute;width:var(--size);height:calc(var(--size) * 1.5);border-radius:2px;
+  animation:cc-burst var(--flight) linear both;will-change:transform,opacity;
+}
+.cc-confetti i[data-shape="star"] {
+  height:var(--size);
+  clip-path:polygon(50% 0,63% 33%,100% 38%,73% 62%,81% 100%,50% 81%,19% 100%,27% 62%,0 38%,37% 33%);
+}
+.cc-confetti i[data-shape="circle"] {height:var(--size);border-radius:50%}
+@keyframes cc-burst {
+  0% {opacity:0;transform:translate(0,0) rotate(0deg)}
+  7% {opacity:1}
+  28% {opacity:1;transform:translate(var(--arc-x),var(--arc-y)) rotate(var(--twist))}
+  82% {opacity:1}
+  100% {opacity:0;transform:translate(var(--end-x),var(--end-y)) rotate(calc(3 * var(--twist)))}
+}
+@media (prefers-reduced-motion:reduce) {.cc-confetti,.cc-flash {display:none}}
 @container (max-width:310px) {.cc-fields {grid-template-columns:1fr}.cc-head {align-items:flex-start}.cc-title {font-size:17px}.cc-btn {padding:7px 9px}}
 `;
 const EN = {
@@ -440,6 +495,38 @@ const EN = {
     "Start with mate in 1. Use the settings above to begin.",
   "盤面で指す · チャットで学ぶ": "Play on the board · Learn in chat",
 };
+function Confetti() {
+  const colors = ["#ffe088", "#f6ae38", "#fff7d0", "#7cf3bd", "#66ddff", "#fba4cb", "#c5a8ff"];
+  return jsx("div", {
+    className: "cc-confetti",
+    "aria-hidden": true,
+    children: Array.from({ length: 108 }, (_, i) => {
+      const wave = Math.floor(i / 36);
+      const fromLeft = i % 2 === 0;
+      const fromTop = wave === 2;
+      const direction = fromLeft ? 1 : -1;
+      const sweep = 12 + (i * 17) % 80;
+      const height = 16 + (i * 29) % 65;
+      return jsx("i", {
+        "data-shape": i % 5 === 0 ? "star" : i % 3 === 0 ? "circle" : "ribbon",
+        style: {
+          left: fromTop ? `${(i * 47) % 100}%` : fromLeft ? "0%" : "100%",
+          top: fromTop ? "-4%" : wave === 0 ? "68%" : "48%",
+          background: colors[i % colors.length],
+          "--size": `clamp(3px, ${1.15 + (i % 7) * 0.24}cqw, 15px)`,
+          "--flight": `${1550 + (i * 113) % 900}ms`,
+          "--arc-x": `${direction * sweep * (fromTop ? 0.15 : 0.68)}cqw`,
+          "--arc-y": `${fromTop ? 18 + i % 14 : -height}cqw`,
+          "--end-x": `${direction * sweep * (fromTop ? 0.27 : 1.1)}cqw`,
+          "--end-y": fromTop ? "112cqw" : "59cqw",
+          "--twist": `${direction * (110 + (i * 31) % 230)}deg`,
+          animationDelay: `${wave * 320 + (i * 61) % 180}ms`,
+        },
+      }, i);
+    }),
+  });
+}
+
 function ChessPane() {
   const [language, setLanguage] = useState(() => {
     try {
@@ -464,6 +551,12 @@ function ChessPane() {
   const [square, setSquare] = useState(null);
   const [error, setError] = useState(null);
   const [note, setNote] = useState("");
+  const [mistake, setMistake] = useState(null);
+  const [hint, setHint] = useState(null);
+  const [progress, setProgress] = useState(null);
+  const [celebrate, setCelebrate] = useState(false);
+  const [resultDismissed, setResultDismissed] = useState(false);
+  const previousPosition = useRef(null);
   const [pending, setPending] = useState(null);
   const [promotion, setPromotion] = useState(null);
   const [setup, setSetup] = useState(false);
@@ -494,9 +587,27 @@ function ChessPane() {
   const [hostBusy, setHostBusy] = useState(false);
   const currentSession = () => host.state?.focusedSessionId?.get?.() ?? null;
   const games = data?.games || [];
+  const visibleGames = games.slice(-5);
   const game =
-    games.find((g) => g.game_id === selected) || games[games.length - 1];
+    visibleGames.find((g) => g.game_id === selected) || visibleGames[visibleGames.length - 1];
   const t2 = (en, ja) => (language === "ja" ? ja : en);
+  const isMate = !!game?.status?.is_checkmate;
+  const playerWon = isMate && !!game.user_color && game.status.turn !== game.user_color;
+  const mateReason = {
+    blocked: t2("The king is boxed in by its own pieces and cannot stop the check.", "キングは自分の駒に囲まれ、チェックを防げません。"),
+    double_check: t2("Two pieces give check at once, and the king has no safe square.", "2枚の駒が同時にチェックし、キングに安全な移動先がありません。"),
+    no_defense: t2("The king has no safe square, and the check cannot be blocked or captured.", "キングに安全な移動先がなく、合駒や駒の捕獲でもチェックを防げません。"),
+  };
+  const hintText = {
+    check: t2("Look for a check, then see which squares the king can escape to.", "チェックをかける手を探し、キングの逃げ道を確認しましょう。"),
+    capture: t2("Look for a capture that takes away the defender’s options.", "駒を取って、相手の守りを減らせる手を探しましょう。"),
+    escape_squares: t2("Look for a quiet move that limits the king’s escape squares.", "すぐにチェックする手だけでなく、キングの逃げ道を狭める手も探しましょう。"),
+  };
+  const mistakeText = {
+    no_check: t2("That move gives no check. Look for a move that attacks the king.", "その手はチェックになりません。キングを攻撃できる手を探しましょう。"),
+    stalemate: t2("The opponent has no legal move and is not in check. That is stalemate.", "相手はチェックされておらず、指せる手もないので引き分けです。"),
+    defense: t2("The defender can avoid mate in time. Check the king’s escapes, captures and blocks.", "相手に詰みを防ぐ手があります。キングの逃げ道、駒の捕獲、合駒を確認しましょう。"),
+  };
   const errors = {
     stale_position: t2(
       "The position changed. Please try again.",
@@ -563,11 +674,32 @@ function ChessPane() {
   }, []);
   useEffect(() => {
     setNote("");
+    setMistake(null);
+    setHint(null);
+    setProgress(null);
   }, [game?.game_id]);
+  useEffect(() => {
+    if (progress === null) return;
+    const timer = setTimeout(() => setProgress(null), 1650);
+    return () => clearTimeout(timer);
+  }, [progress]);
+  useEffect(() => {
+    const previous = previousPosition.current;
+    previousPosition.current = { id: game?.game_id, playerWon };
+    if (playerWon && previous?.id === game.game_id && !previous.playerWon) {
+      setCelebrate(true);
+      const timer = setTimeout(() => setCelebrate(false), 3350);
+      return () => clearTimeout(timer);
+    }
+    setCelebrate(false);
+  }, [game?.game_id, playerWon]);
+  useEffect(() => setResultDismissed(false), [game?.game_id, game?.revision, playerWon]);
   useEffect(() => {
     setSquare(null);
     setPromotion(null);
     setPgn("");
+    setHint(null);
+    setMistake(null);
   }, [game?.game_id, game?.fen]);
   useEffect(() => {
     if (!pending || pending.kind !== "ai") return;
@@ -610,19 +742,15 @@ function ChessPane() {
       return;
     }
     const sid = currentSession();
-    const text =
-      explanation ||
-      (language === "ja"
-        ? `対局 ${position.game_id} はあなたの手番です。chess_boardで確認し、chess_legal_movesから1手選んでchess_make_moveで指してください。expected_revision=${position.revision}。私は${position.user_color}。私の手は指さないでください。盤面の再掲は不要、コメントは一文で。`
-        : `Your turn in game ${position.game_id}. Read chess_board, choose one legal move from chess_legal_moves, and play it using chess_make_move with expected_revision=${position.revision}. I play ${position.user_color}. Do not play my moves. No ASCII board; at most one sentence of commentary.`);
+    const opponent = t(position.user_color === "white" ? "黒" : "白");
+    const text = explanation
+      ? explanation + t2(" Respond in English.", " 日本語で回答してください。")
+      : t2(
+          `Your turn as ${opponent} in game ${position.game_id} (board revision ${position.revision}). Play one legal move and explain it in one sentence in English.`,
+          `対局 ${position.game_id}（盤面の更新番号 ${position.revision}）で${opponent}を1手指し、その狙いを日本語で一文で教えてください。`,
+        );
     try {
-      const accepted = await host.composer.submit(
-        sid,
-        text +
-          (language === "ja"
-            ? "\n日本語で回答してください。"
-            : "\nRespond in English."),
-      );
+      const accepted = await host.composer.submit(sid, text);
       if (accepted === false) throw new Error("No composer");
       if (!explanation) setPending({ kind: "ai", gameId: position.game_id });
       else setNote(t("チャットに依頼しました。回答は左側で確認できます。"));
@@ -639,6 +767,9 @@ function ChessPane() {
     const requestGeneration = ++generation.current;
     setPending({ kind: "local" });
     setNote("");
+    setMistake(null);
+    setHint(null);
+    setProgress(null);
     const sid = currentSession();
     try {
       const response = await CTX.rest("/action", {
@@ -654,6 +785,10 @@ function ChessPane() {
       });
       if (generation.current !== requestGeneration) return null;
       if (response.game) applyGame(response.game);
+      if (response.error === "try_again" || response.error === "illegal_move") {
+        setMistake({ detail: response.mistake, error: response.error, attempt: requestGeneration });
+        return null;
+      }
       if (response.error) {
         setNote(
           errors[response.error] ||
@@ -664,20 +799,9 @@ function ChessPane() {
         );
         return null;
       }
-      if (response.feedback)
-        setNote(
-          response.feedback === "solved"
-            ? t2("Checkmate! Nicely done.", "チェックメイト！お見事です。")
-            : t2(
-                "Good move. The defender has replied — keep going!",
-                "正しい手です。相手が応じました。続きを考えましょう！",
-              ),
-        );
-      if (response.hint_square)
-        setNote(
-          t2("Look at the piece on ", "このマスの駒に注目：") +
-            response.hint_square,
-        );
+      if (response.feedback === "correct") setProgress(requestGeneration);
+      if (response.hint_idea || response.hint_square)
+        setHint(response.hint_idea || "escape_squares");
       if (response.pgn) setPgn(response.pgn);
       return { ...response, session: sid };
     } catch (_) {
@@ -733,6 +857,20 @@ function ChessPane() {
       maybeReply(response);
     }
   };
+  const puzzleColor = game?.user_color === "black" ? t("黒") : t("白");
+  const puzzleGoal = game?.puzzle && t2(
+    `${puzzleColor} to mate in ${game.puzzle.depth}`,
+    `${puzzleColor}で${game.puzzle.depth}手詰め`,
+  );
+  const nextPuzzle = async () => {
+    const result = await perform("new_puzzle", {
+      depth: game.puzzle.depth,
+      previous_puzzle: game.puzzle.id,
+    });
+    if (result?.game) setSelected(result.game.game_id);
+  };
+  const showWin = playerWon && !resultDismissed;
+  const showResult = showWin || !!mistake;
   const legal = game?.legal_moves || [];
   const targets = square ? legal.filter((m) => m.from === square) : [];
   const opponentTurn =
@@ -765,6 +903,10 @@ function ChessPane() {
     const own =
       piece &&
       (game.status?.turn !== "black") === (piece === piece.toUpperCase());
+    if (own) {
+      setProgress(null);
+      setHint(null);
+    }
     setSquare(own && square !== sq ? sq : null);
   };
   const btn = (label, onClick, props = {}) =>
@@ -907,10 +1049,10 @@ function ChessPane() {
                             onChange: (e) => setOdds(e.target.value),
                             children: options([
                               ["none", t("なし（平手）")],
-                              ["pawn", t("ポーン落ち")],
-                              ["knight", t("ナイト落ち")],
-                              ["rook", t("ルーク落ち")],
-                              ["queen", t("クイーン落ち")],
+                              ["pawn", t2("Hermes starts without a pawn", "Hermesのポーンが1枚少ない")],
+                              ["knight", t2("Hermes starts without a knight", "Hermesのナイトが1枚少ない")],
+                              ["rook", t2("Hermes starts without a rook", "Hermesのルークが1枚少ない")],
+                              ["queen", t2("Hermes starts without its queen", "Hermesのクイーンが1枚少ない")],
                             ]),
                           }),
                         ],
@@ -949,7 +1091,7 @@ function ChessPane() {
                   value: game.game_id,
                   disabled: !!pending,
                   onChange: (e) => setSelected(e.target.value),
-                  children: [...games].reverse().map((g, i) =>
+                  children: [...visibleGames].reverse().map((g, i) =>
                     jsx(
                       "option",
                       {
@@ -976,12 +1118,12 @@ function ChessPane() {
                   className: "cc-status",
                   role: "status",
                   children: [
-                    jsx("strong", { children: statusText(game, t) }),
+                    jsx("strong", { children: puzzleGoal || statusText(game, t) }),
                     jsx("div", {
                       className: "cc-small",
                       children: pending
                         ? pending.kind === "ai"
-                          ? t2("Hermes is thinking…", "Hermesが考え中…")
+                          ? null
                           : t2("Updating the board…", "盤面を更新中…")
                         : opponentTurn
                           ? t2("Waiting for Hermes’s move", "Hermesの手番です")
@@ -989,9 +1131,7 @@ function ChessPane() {
                             ? square +
                               t(" の駒を選択中 · 移動先を選んでください")
                             : game.status?.is_game_over
-                              ? t(
-                                  "おつかれさまでした。局面を振り返ってみましょう。",
-                                )
+                              ? (puzzleGoal ? statusText(game, t) : null)
                               : t("駒を選んで、移動先をクリック"),
                     }),
                   ],
@@ -1001,17 +1141,82 @@ function ChessPane() {
                 }),
               ],
             }),
-            jsx("div", {
+            pending?.kind === "ai" && jsxs("div", {
+              className: "cc-thinking",
+              role: "status",
+              children: [
+                jsx("span", { className: "cc-spinner", "aria-hidden": true }),
+                jsx("strong", { children: t2("Hermes is thinking about its next move…", "Hermesが次の一手を考えています…") }),
+              ],
+            }),
+            note && jsx("div", { role: "status", className: "cc-feedback", children: note }),
+            jsxs("div", {
               className: "cc-board",
-              children: jsx(Board, {
-                game,
-                sel: square,
-                targets,
-                onSquare,
-                pending: pending || error || opponentTurn,
-                flipped,
-                t,
-              }),
+              "aria-busy": !!pending,
+              children: [
+                jsx(Board, {
+                  game,
+                  sel: square,
+                  targets,
+                  onSquare,
+                  pending: pending || error || opponentTurn || showResult,
+                  flipped,
+                  t,
+                }),
+                hint && jsxs("div", {
+                  className: "cc-board-notice cc-feedback",
+                  role: "status",
+                  children: [
+                    jsx("strong", { children: t("ヒント") }),
+                    jsx("p", { children: hintText[hint] }),
+                  ],
+                }),
+                progress !== null && jsx("div", {
+                  className: "cc-board-notice cc-board-progress",
+                  role: "status",
+                  children: t2("Correct move · Your turn", "正解 · あなたの手番"),
+                }, progress),
+                showResult && jsxs("div", {
+                  className: `cc-result${mistake ? " cc-result-wrong" : ""}`,
+                  children: [
+                    mistake && jsx("div", { className: "cc-flash", "aria-hidden": true }, mistake.attempt),
+                    showWin && celebrate && jsx(Confetti, {}),
+                    jsxs("div", {
+                      className: "cc-result-card",
+                      children: [
+                        jsxs("div", {
+                          role: "status",
+                          children: [
+                            jsx("span", { className: "cc-result-symbol", "aria-hidden": true, children: mistake ? "×" : "♛" }),
+                            jsx("strong", {
+                              className: "cc-result-title",
+                              children: mistake
+                                ? (mistake.error === "try_again" ? t2("Incorrect move", "不正解") : t2("Illegal move", "指せない手です"))
+                                : (game.puzzle ? t2("Checkmate! Puzzle solved", "チェックメイト！ 正解です") : t2("Checkmate! You won", "チェックメイト！ あなたの勝ちです")),
+                            }),
+                            jsx("p", {
+                              children: mistake
+                                ? (mistakeText[mistake.detail] || errors[mistake.error])
+                                : (mateReason[game.mate_detail] || mateReason.no_defense),
+                            }),
+                          ],
+                        }),
+                        jsxs("div", {
+                          className: "cc-result-actions",
+                          children: [
+                            showWin && game.puzzle && btn(t2("Next puzzle", "次の問題"), nextPuzzle, {
+                              className: "cc-btn cc-primary",
+                            }),
+                            mistake
+                              ? btn(t2("Try another move", "別の手を試す"), () => setMistake(null), { className: "cc-btn cc-primary" })
+                              : btn(t2("View board", "盤面を見る"), () => setResultDismissed(true)),
+                          ],
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
             }),
             promotion &&
               jsxs("div", {
@@ -1074,13 +1279,7 @@ function ChessPane() {
                 className: "cc-tools",
                 children: [
                   btn(t2("Try again", "最初から挑戦"), () => perform("retry")),
-                  btn(t2("Next puzzle", "次の問題"), async () => {
-                    const r = await perform("new_puzzle", {
-                      depth: game.puzzle.depth,
-                      previous_puzzle: game.puzzle.id,
-                    });
-                    if (r?.game) setSelected(r.game.game_id);
-                  }),
+                  !showWin && btn(t2("Next puzzle", "次の問題"), nextPuzzle),
                 ],
               }),
             opponentTurn &&
@@ -1124,13 +1323,8 @@ function ChessPane() {
           rows: 6,
           style: { width: "100%", fontFamily: "monospace" },
         }),
-      note &&
+      note && (setup || !game) &&
         jsx("div", { role: "status", className: "cc-message", children: note }),
-      jsx("footer", {
-        className: "cc-small",
-        style: { marginTop: 20 },
-        children: t("盤面で指す · チャットで学ぶ"),
-      }),
     ],
   });
 }

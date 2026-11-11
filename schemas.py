@@ -227,5 +227,5 @@ CHESS_NEW_GAME["parameters"]["properties"]["user_color"] = {
     "description": "The human player's color; the desktop only enables their moves."
 }
 CHESS_MAKE_MOVE["parameters"]["properties"]["expected_revision"] = {
-    "type": "integer", "description": "Revision from chess_board. Reject stale requests instead of playing after a user undo."
+    "type": "integer", "description": "For a Desktop turn request, use the board revision supplied in the request. A stale revision rejects the move."
 }
